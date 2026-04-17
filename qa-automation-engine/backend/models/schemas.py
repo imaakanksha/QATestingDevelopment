@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Any, Dict, List, Optional, Union
+from pydantic import BaseModel
+from typing import Any, Dict, List
+
 
 class DiffSummary(BaseModel):
     total_keys: int
@@ -8,15 +9,18 @@ class DiffSummary(BaseModel):
     modified: int
     match_score: float
 
+
 class DiffDetail(BaseModel):
     key_path: str
-    baseline_value: Any
-    target_value: Any
+    baseline_value: Any = None
+    target_value: Any = None
     change_type: str  # "added", "removed", "modified"
+
 
 class DiffResponse(BaseModel):
     summary: DiffSummary
     differences: List[DiffDetail]
+
 
 class FlattenResponse(BaseModel):
     original_key_count: int

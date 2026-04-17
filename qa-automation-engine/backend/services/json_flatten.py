@@ -1,49 +1,57 @@
+"""JSON flattening service."""
+
 from models.schemas import FlattenResponse
 
-def flatten_dict(data: dict, separator: str = '.', max_depth: int = None, preserve_arrays: bool = False) -> FlattenResponse:
-    
-    def count_keys(d):
-        count = 0
-        if isinstance(d, dict):
-            for k, v in d.items():
-                count += 1 + count_keys(v)
-        elif isinstance(d, list):
-            for item in d:
-                count += count_keys(item)
-        return count
-        
-    original_key_count = count_keys(data)
-    
+
+def _count_keys(d) -> int:
+    """Recursively count all keys/elements in a nested structure."""
+    count = 0
+    if isinstance(d, dict):
+        for v in d.values():
+            count += 1 + _count_keys(v)
+    elif isinstance(d, list):
+        for item in d:
+            count += _count_keys(item)
+    return count
+
+
+def flatten_dict(
+    data,
+    separator: str = ".",
+    max_depth: int = None,
+    preserve_arrays: bool = False,
+) -> FlattenResponse:
+    """Flatten a nested JSON structure into a single-level dict.
+
+    Args:
+        data: The input dict or list.
+        separator: Character used to join nested key paths.
+        max_depth: Maximum recursion depth. None = unlimited.
+        preserve_arrays: If True, keep arrays as-is instead of expanding with index keys.
+    """
+    original_key_count = _count_keys(data)
     out = {}
-    
-    def flatten(x, name='', current_depth=0):
-        if max_depth is not None and current_depth > max_depth:
-            out[name[:-len(separator)]] = x
+
+    def _flatten(obj, prefix: str = "", depth: int = 0):
+        if max_depth is not None and depth >= max_depth:
+            out[prefix] = obj
             return
-            
-        if isinstance(x, dict):
-            for a in x:
-                flatten(x[a], name + a + separator, current_depth + 1)
-        elif isinstance(x, list) and not preserve_arrays:
-            for i, a in enumerate(x):
-                flatten(a, name + str(i) + separator, current_depth + 1)
+
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                new_key = f"{prefix}{separator}{key}" if prefix else key
+                _flatten(value, new_key, depth + 1)
+        elif isinstance(obj, list) and not preserve_arrays:
+            for i, item in enumerate(obj):
+                new_key = f"{prefix}{separator}{i}" if prefix else str(i)
+                _flatten(item, new_key, depth + 1)
         else:
-            out[name[:-len(separator)]] = x
-            
-    # For top level list
-    if isinstance(data, dict):
-        for a in data:
-            flatten(data[a], a + separator, 1)
-    elif isinstance(data, list) and not preserve_arrays:
-        for i, a in enumerate(data):
-            flatten(a, str(i) + separator, 1)
-    else:
-        out = data
-        
-    flattened_key_count = len(out.keys()) if isinstance(out, dict) else 0
-    
+            out[prefix] = obj
+
+    _flatten(data)
+
     return FlattenResponse(
         original_key_count=original_key_count,
-        flattened_key_count=flattened_key_count,
-        flattened=out if isinstance(out, dict) else {"data": out}
+        flattened_key_count=len(out),
+        flattened=out,
     )

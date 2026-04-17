@@ -1,28 +1,64 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  body {
-    @apply bg-background text-slate-800 font-sans antialiased;
+/* ── Design Tokens (Tailwind v4 @theme) ── */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Light professional palette */
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-accent: #2563EB;
+  --color-accent-light: #DBEAFE;
+  --color-success: #16A34A;
+  --color-danger: #DC2626;
+  --color-warning: #D97706;
+}
+
+/* ── Base ── */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ── Animations ── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
-
-/* Custom scrollbar for light theme */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out both;
 }
 
-::-webkit-scrollbar-track {
-  background: #F1F5F9;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
-
-::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+.animate-spin {
+  animation: spin 1s linear infinite;
 }

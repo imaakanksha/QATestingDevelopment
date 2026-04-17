@@ -1,52 +1,48 @@
-import { useState } from 'react';
-import toast from 'react-hot-toast';
-import { Loader2, Minimize2, Copy, Download, ArrowRight } from 'lucide-react';
-import JsonTreeViewer from './JsonTreeViewer';
+import { useState } from "react";
+import toast from "react-hot-toast";
+import { Loader2, Minimize2, Copy, Download, ArrowRight } from "lucide-react";
+import { API_BASE } from "../lib/utils";
+import JsonTreeViewer from "./JsonTreeViewer";
 
 export default function JsonFlattener() {
-  const [rawJson, setRawJson] = useState('');
+  const [rawJson, setRawJson] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
 
   const [options, setOptions] = useState({
-    separator: '.',
-    max_depth: '',
-    preserve_arrays: false
+    separator: ".",
+    max_depth: "",
+    preserve_arrays: false,
   });
 
   const handleFlatten = async () => {
-    if (!rawJson.trim()) {
-      toast.error("Please paste some JSON to flatten");
-      return;
-    }
+    if (!rawJson.trim()) return toast.error("Paste some JSON to flatten");
 
     try {
-      // Validate local JSON parse first
       JSON.parse(rawJson);
-    } catch (e) {
-      toast.error("Invalid JSON format");
-      return;
+    } catch {
+      return toast.error("Invalid JSON — please check your syntax");
     }
 
     setLoading(true);
-    const formData = new FormData();
-    formData.append("raw_json", rawJson);
-    formData.append("separator", options.separator || '.');
-    if (options.max_depth) formData.append("max_depth", parseInt(options.max_depth));
-    formData.append("preserve_arrays", options.preserve_arrays);
+    const fd = new FormData();
+    fd.append("raw_json", rawJson);
+    fd.append("separator", options.separator || ".");
+    if (options.max_depth) fd.append("max_depth", parseInt(options.max_depth));
+    fd.append("preserve_arrays", options.preserve_arrays);
 
     try {
-      const res = await fetch("http://localhost:8000/api/flatten-json", {
+      const res = await fetch(`${API_BASE}/flatten-json`, {
         method: "POST",
-        body: formData,
+        body: fd,
       });
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || "Flattening failed");
+        const err = await res.json().catch(() => ({ detail: "Server error" }));
+        throw new Error(err.detail);
       }
       const data = await res.json();
       setResults(data);
-      toast.success("JSON Flattened successfully!");
+      toast.success(`Flattened to ${data.flattened_key_count} keys`);
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -57,119 +53,139 @@ export default function JsonFlattener() {
   const copyToClipboard = () => {
     if (!results) return;
     navigator.clipboard.writeText(JSON.stringify(results.flattened, null, 2));
-    toast.success("Copied to clipboard!");
+    toast.success("Copied to clipboard");
   };
 
   const downloadJson = () => {
     if (!results) return;
-    const blob = new Blob([JSON.stringify(results.flattened, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(results.flattened, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'flattened.json';
+    a.download = "flattened.json";
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="flex flex-col h-full space-y-6">
-      
-      {/* Input Section */}
-      <div className="bg-surface rounded-xl border border-slate-800 p-6 flex flex-col shrink-0">
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex-1 mr-6">
-            <label className="block text-sm font-medium text-slate-200 mb-2">Raw JSON Input</label>
-            <textarea 
-              className="w-full h-40 bg-[#0B1120] border border-slate-700 rounded-lg p-4 text-sm font-mono text-slate-300 focus:outline-none focus:border-accent transition-colors resize-none"
-              placeholder='{"paste": {"your": "nested json here"}}'
+    <div className="space-y-6">
+      {/* Input section */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex gap-5">
+          {/* Textarea */}
+          <div className="flex-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Raw JSON Input
+            </label>
+            <textarea
+              className="w-full h-44 bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all resize-none"
+              placeholder='{"paste": {"your": {"nested": "json"}}}'
               value={rawJson}
-              onChange={e => setRawJson(e.target.value)}
+              onChange={(e) => setRawJson(e.target.value)}
             />
           </div>
 
-          <div className="w-72 bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-            <h4 className="text-sm font-medium text-slate-200 mb-3 border-b border-slate-700 pb-2">Flatten Options</h4>
+          {/* Options panel */}
+          <div className="w-64 bg-slate-50 rounded-xl p-4 border border-slate-200">
+            <h4 className="text-sm font-semibold text-slate-700 mb-3 pb-2 border-b border-slate-200">
+              Flatten Options
+            </h4>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Separator</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-[#0B1120] border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-accent transition-colors"
+                <label className="block text-xs text-slate-500 mb-1 font-medium">Separator</label>
+                <input
+                  type="text"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                   value={options.separator}
-                  onChange={e => setOptions({...options, separator: e.target.value})}
+                  onChange={(e) => setOptions({ ...options, separator: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Max Depth (Optional)</label>
-                <input 
-                  type="number" min="0"
-                  className="w-full bg-[#0B1120] border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-accent transition-colors"
+                <label className="block text-xs text-slate-500 mb-1 font-medium">Max Depth</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                   placeholder="Unlimited"
                   value={options.max_depth}
-                  onChange={e => setOptions({...options, max_depth: e.target.value})}
+                  onChange={(e) => setOptions({ ...options, max_depth: e.target.value })}
                 />
               </div>
-              <div className="flex items-center space-x-2 pt-1">
-                <input 
-                  type="checkbox" 
-                  id="preserveArrays"
-                  className="rounded border-slate-700 text-accent focus:ring-accent bg-[#0B1120]"
+              <label className="flex items-center gap-2.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-slate-300 text-accent focus:ring-accent/30"
                   checked={options.preserve_arrays}
-                  onChange={e => setOptions({...options, preserve_arrays: e.target.checked})}
+                  onChange={(e) => setOptions({ ...options, preserve_arrays: e.target.checked })}
                 />
-                <label htmlFor="preserveArrays" className="text-sm text-slate-300 select-none">Preserve Arrays</label>
-              </div>
+                <span className="text-sm text-slate-600 select-none">Preserve arrays</span>
+              </label>
             </div>
-            
+
             <button
+              id="btn-flatten"
               onClick={handleFlatten}
               disabled={loading || !rawJson}
-              className="w-full mt-4 bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 rounded flex justify-center items-center transition-all shadow-lg shadow-accent/20"
+              className="w-full mt-4 bg-accent hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg flex justify-center items-center gap-2 transition-all"
             >
-              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Minimize2 className="w-4 h-4 mr-2" />}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Minimize2 className="w-4 h-4" />}
               Flatten JSON
             </button>
           </div>
         </div>
       </div>
 
-      {/* Results Section */}
+      {/* Results */}
       {results && (
-        <div className="flex-1 flex flex-col min-h-0 bg-surface rounded-xl border border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-surface shrink-0">
-            <div className="flex items-center">
-              <h3 className="font-semibold text-slate-200 mr-4">Flattened Output</h3>
-              <div className="bg-slate-800 text-slate-300 text-xs px-3 py-1 rounded-full flex items-center border border-slate-700">
-                <span>Original: {results.original_key_count} keys</span>
-                <ArrowRight className="w-3 h-3 mx-2 text-slate-500" />
-                <span className="text-accent font-medium">Flattened: {results.flattened_key_count} keys</span>
+        <div className="animate-fade-in-up bg-white rounded-xl border border-slate-200 overflow-hidden">
+          {/* Results header */}
+          <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-slate-800 text-sm">Flattened Output</h3>
+              <div className="bg-slate-100 text-slate-600 text-xs px-3 py-1 rounded-full flex items-center gap-1.5 font-medium">
+                <span>{results.original_key_count} keys</span>
+                <ArrowRight className="w-3 h-3 text-slate-400" />
+                <span className="text-accent font-semibold">{results.flattened_key_count} keys</span>
               </div>
             </div>
-            <div className="flex space-x-2">
-              <button 
+            <div className="flex gap-2">
+              <button
                 onClick={copyToClipboard}
-                className="flex items-center text-xs bg-slate-800 text-slate-300 px-3 py-1.5 rounded hover:bg-slate-700 transition-colors font-medium border border-slate-700"
+                className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium"
               >
-                <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy
+                <Copy className="w-3.5 h-3.5" /> Copy
               </button>
-              <button 
+              <button
                 onClick={downloadJson}
-                className="flex items-center text-xs bg-accent/20 text-accent px-3 py-1.5 rounded hover:bg-accent hover:text-white transition-colors font-medium border border-accent/20"
+                className="flex items-center gap-1.5 text-xs bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
-                <Download className="w-3.5 h-3.5 mr-1.5" /> Download
+                <Download className="w-3.5 h-3.5" /> Download
               </button>
             </div>
           </div>
-          
-          <div className="flex-1 grid grid-cols-2 min-h-0 divide-x divide-slate-800">
-             <div className="p-4 overflow-auto bg-[#0B1120]">
-                <div className="text-xs text-slate-500 mb-2 uppercase font-semibold tracking-wider">Original JSON</div>
-                <JsonTreeViewer data={JSON.parse(rawJson)} />
-             </div>
-             <div className="p-4 overflow-auto bg-[#0B1120]">
-                <div className="text-xs text-accent mb-2 uppercase font-semibold tracking-wider">Flattened JSON</div>
-                <JsonTreeViewer data={results.flattened} />
-             </div>
+
+          {/* Side-by-side view */}
+          <div className="grid grid-cols-2 divide-x divide-slate-200">
+            <div className="p-4">
+              <div className="text-[11px] text-slate-500 mb-2 uppercase font-semibold tracking-wider">
+                Original JSON
+              </div>
+              <JsonTreeViewer data={JSON.parse(rawJson)} />
+            </div>
+            <div className="p-4">
+              <div className="text-[11px] text-accent mb-2 uppercase font-semibold tracking-wider">
+                Flattened JSON
+              </div>
+              <JsonTreeViewer data={results.flattened} />
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!results && !loading && (
+        <div className="text-center py-12 text-slate-400">
+          <p className="text-sm">Paste nested JSON and click "Flatten JSON" to see the flattened output.</p>
         </div>
       )}
     </div>

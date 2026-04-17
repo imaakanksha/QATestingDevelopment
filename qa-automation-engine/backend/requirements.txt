@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+deepdiff
+pandas
+openpyxl
+flatten-json
+pydantic
+jinja2
