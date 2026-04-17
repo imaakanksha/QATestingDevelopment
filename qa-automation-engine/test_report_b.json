@@ -1,0 +1,56 @@
+{
+  "metadata": {
+    "initial_id": "RPT-042",
+    "report": "Owner/Player",
+    "report_name": "Demand Planning Dashboard",
+    "report_description": "Monthly demand planning dashboard for supply chain",
+    "owner_player": "Jane Doe",
+    "tenant": "ACME Corp"
+  },
+  "sections": {
+    "filter_aop": {
+      "columns": ["Filter Type", "Filter Name", "Filter Item", "Default Value"],
+      "data": [
+        {"filter_type": "SP", "filter_name": "Planning Horizon", "filter_item": "24 Months", "default_value": "Current Quarter"},
+        {"filter_type": "DP", "filter_name": "Product Level", "filter_item": "Product Family", "default_value": "All"},
+        {"filter_type": "DP", "filter_name": "Channel", "filter_item": "All Channels", "default_value": "Retail"},
+        {"filter_type": "SP", "filter_name": "Scenario", "filter_item": "Best Case", "default_value": "Best Case"}
+      ]
+    },
+    "dimensions": {
+      "columns": ["Dimension Name", "Dimension Display Name", "Type", "Hierarchy Level", "Sort Order", "Expandable"],
+      "data": [
+        {"dimension_name": "Product", "dimension_display_name": "Product Family", "type": "Row", "hierarchy_level": "Family", "sort_order": 1, "expandable": true},
+        {"dimension_name": "Time", "dimension_display_name": "Time Bucket", "type": "Column", "hierarchy_level": "Month", "sort_order": 2, "expandable": false},
+        {"dimension_name": "Channel", "dimension_display_name": "Sales Channel", "type": "Row", "hierarchy_level": "Channel", "sort_order": 3, "expandable": true}
+      ]
+    },
+    "measures": {
+      "columns": ["Measure Name", "Measure Translation", "Unit", "Format", "Editable", "Visible"],
+      "data": [
+        {"measure_name": "Demand_Forecast", "measure_translation": "Demand Plan", "unit": "Units", "format": "#,##0", "editable": true, "visible": true},
+        {"measure_name": "Statistical_Forecast", "measure_translation": "Stat Baseline", "unit": "Units", "format": "#,##0", "editable": false, "visible": true},
+        {"measure_name": "Forecast_Accuracy", "measure_translation": "Accuracy %", "unit": "%", "format": "0.00%", "editable": false, "visible": true},
+        {"measure_name": "Supply_Plan", "measure_translation": "Supply Plan", "unit": "Units", "format": "#,##0", "editable": true, "visible": true},
+        {"measure_name": "Inventory", "measure_translation": "Projected Inventory", "unit": "Units", "format": "#,##0", "editable": false, "visible": true}
+      ]
+    },
+    "kpi_panel": {
+      "columns": ["KPI Name", "Calculation", "Target", "Alert Threshold"],
+      "data": [
+        {"kpi_name": "MAPE", "calculation": "ABS(Actual - Forecast) / Actual", "target": "< 15%", "alert_threshold": "20%"},
+        {"kpi_name": "Fill Rate", "calculation": "Orders Filled / Total Orders", "target": "> 95%", "alert_threshold": "90%"}
+      ]
+    },
+    "settings": {
+      "columns": ["Setting Name", "Setting Value", "Description"],
+      "data": [
+        {"setting_name": "auto_refresh", "setting_value": "false", "description": "Auto-refresh data on load"},
+        {"setting_name": "default_view", "setting_value": "chart", "description": "Default view mode"},
+        {"setting_name": "export_format", "setting_value": "csv", "description": "Default export format"},
+        {"setting_name": "theme", "setting_value": "dark", "description": "UI theme preference"}
+      ]
+    }
+  },
+  "section_order": ["filter_aop", "dimensions", "measures", "kpi_panel", "settings"]
+}

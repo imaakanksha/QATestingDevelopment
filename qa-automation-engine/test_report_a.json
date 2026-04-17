@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "initial_id": "RPT-001",
+    "report": "Owner/Player",
+    "report_name": "Sales Forecast",
+    "report_description": "Weekly sales forecast report for demand planning",
+    "owner_player": "John Smith"
+  },
+  "sections": {
+    "filter_aop": {
+      "columns": ["Filter Type", "Filter Name", "Filter Item", "Default Value"],
+      "data": [
+        {"filter_type": "DP", "filter_name": "Planning Horizon", "filter_item": "12 Months", "default_value": "Current Month"},
+        {"filter_type": "DP", "filter_name": "Product Level", "filter_item": "SKU", "default_value": "All"},
+        {"filter_type": "DP", "filter_name": "Region", "filter_item": "Global", "default_value": "North America"},
+        {"filter_type": "SP", "filter_name": "Scenario", "filter_item": "Base Case", "default_value": "Base Case"}
+      ]
+    },
+    "dimensions": {
+      "columns": ["Dimension Name", "Dimension Display Name", "Type", "Hierarchy Level", "Sort Order"],
+      "data": [
+        {"dimension_name": "Product", "dimension_display_name": "Product", "type": "Row", "hierarchy_level": "SKU", "sort_order": 1},
+        {"dimension_name": "Location", "dimension_display_name": "Ship-To Location", "type": "Row", "hierarchy_level": "DC", "sort_order": 2},
+        {"dimension_name": "Time", "dimension_display_name": "Time Period", "type": "Column", "hierarchy_level": "Week", "sort_order": 3},
+        {"dimension_name": "Customer", "dimension_display_name": "Customer", "type": "Filter", "hierarchy_level": "Account", "sort_order": 4}
+      ]
+    },
+    "measures": {
+      "columns": ["Measure Name", "Measure Translation", "Unit", "Format", "Editable", "Visible"],
+      "data": [
+        {"measure_name": "Demand_Forecast", "measure_translation": "Demand Forecast", "unit": "Units", "format": "#,##0", "editable": true, "visible": true},
+        {"measure_name": "Statistical_Forecast", "measure_translation": "Stat Forecast", "unit": "Units", "format": "#,##0", "editable": false, "visible": true},
+        {"measure_name": "Forecast_Accuracy", "measure_translation": "Forecast Accuracy", "unit": "%", "format": "0.0%", "editable": false, "visible": true},
+        {"measure_name": "Bias", "measure_translation": "Forecast Bias", "unit": "%", "format": "0.0%", "editable": false, "visible": true},
+        {"measure_name": "Revenue", "measure_translation": "Revenue", "unit": "USD", "format": "$#,##0", "editable": false, "visible": false}
+      ]
+    },
+    "settings": {
+      "columns": ["Setting Name", "Setting Value", "Description"],
+      "data": [
+        {"setting_name": "auto_refresh", "setting_value": "true", "description": "Auto-refresh data on load"},
+        {"setting_name": "default_view", "setting_value": "grid", "description": "Default view mode"},
+        {"setting_name": "export_format", "setting_value": "xlsx", "description": "Default export format"},
+        {"setting_name": "max_rows", "setting_value": "5000", "description": "Maximum rows to display"}
+      ]
+    }
+  },
+  "section_order": ["filter_aop", "dimensions", "measures", "settings"]
+}

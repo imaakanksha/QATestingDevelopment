@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import compare, converter, flattener, export
+from routers import compare, converter, flattener, export, report_export, unified_export
 
 app = FastAPI(title="QA Automation Engine API")
 
@@ -16,6 +16,8 @@ app.include_router(compare.router, prefix="/api", tags=["compare"])
 app.include_router(converter.router, prefix="/api", tags=["converter"])
 app.include_router(flattener.router, prefix="/api", tags=["flattener"])
 app.include_router(export.router, prefix="/api", tags=["export"])
+app.include_router(report_export.router, prefix="/api", tags=["report-export"])
+app.include_router(unified_export.router, prefix="/api", tags=["unified-export"])
 
 @app.get("/")
 def read_root():
