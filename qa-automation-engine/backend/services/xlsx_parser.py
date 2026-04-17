@@ -21,26 +21,35 @@ def _sanitize_value(val):
         return None
     
     # Check for NaN / Infinity (must come before other numeric checks)
-    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
-        return None
+    if isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return None
+        if val.is_integer():
+            return int(val)
     
     # numpy NaN check (np.float64('nan'), etc.)
     try:
         if hasattr(val, 'item'):
             native = val.item()
-            if isinstance(native, float) and (math.isnan(native) or math.isinf(native)):
-                return None
+            if isinstance(native, float):
+                if math.isnan(native) or math.isinf(native):
+                    return None
+                if native.is_integer():
+                    return int(native)
             return native
-    except (ValueError, OverflowError):
-        return None
+    except (ValueError, OverflowError, AttributeError):
+        pass
     
-    # pandas Timestamp → ISO string
-    if isinstance(val, pd.Timestamp):
+    # datetime and time → ISO string
+    if hasattr(val, "isoformat") and callable(val.isoformat):
         return val.isoformat()
     
     # pandas NA / NaT
-    if pd.isna(val):
-        return None
+    try:
+        if pd.isna(val):
+            return None
+    except (ValueError, TypeError):
+        pass
     
     return val
 

@@ -5,6 +5,7 @@ import json
 from typing import Optional
 
 from services.xlsx_parser import parse_xlsx_to_json, get_sheet_names
+from services.wireframe_parser import parse_wireframe_to_json, get_wireframe_preview
 from services.json_diff import compute_json_diff
 from models.schemas import DiffResponse
 
@@ -19,7 +20,7 @@ async def convert_xlsx(
     treat_first_column_as_key: bool = Form(False),
     normalize_keys: bool = Form(False),
 ):
-    """Convert an XLSX file to JSON."""
+    """Convert an XLSX file to JSON (flat-table mode)."""
     if not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="File must be an Excel file (.xlsx or .xls)")
 
@@ -34,6 +35,47 @@ async def convert_xlsx(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Conversion failed: {str(e)}")
+
+
+@router.post("/wireframe-to-json")
+async def convert_wireframe(
+    file: UploadFile = File(...),
+    sheet_name: Optional[str] = Form(None),
+    normalize_keys: bool = Form(True),
+):
+    """Convert an O9-style wireframe XLSX to structured JSON.
+
+    Automatically detects section banners (coloured rows with merged cells)
+    and parses each section independently with its own column headers.
+    Falls back to flat-table parsing if no sections are detected.
+    """
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="File must be an Excel file (.xlsx or .xls)")
+
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        return parse_wireframe_to_json(content, sheet_name, normalize_keys)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Wireframe conversion failed: {str(e)}")
+
+
+@router.post("/wireframe-preview")
+async def preview_wireframe(file: UploadFile = File(...)):
+    """Quick preview: detect sections in a wireframe without full parsing."""
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="File must be an Excel file")
+
+    try:
+        content = await file.read()
+        return get_wireframe_preview(content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
 
 
 @router.post("/xlsx-sheet-names")
