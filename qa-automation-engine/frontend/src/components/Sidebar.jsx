@@ -1,9 +1,9 @@
-import { Bot, Search, FileSpreadsheet, Minimize2 } from "lucide-react";
+import { Bot, Search, Shield, Minimize2 } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const NAV_ITEMS = [
   { id: "comparator", label: "JSON Comparator", icon: Search },
-  { id: "converter", label: "XLSX Converter", icon: FileSpreadsheet },
+  { id: "converter", label: "Wireframe Validator", icon: Shield },
   { id: "flattener", label: "JSON Flattener", icon: Minimize2 },
 ];
 

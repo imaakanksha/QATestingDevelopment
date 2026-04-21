@@ -20,13 +20,15 @@ Upload two JSON files and get a detailed comparison in a **5-column table**:
 - PDF and HTML export for both modes
 - Match score progress bar, search, filtering, pagination
 
-### 📊 XLSX Converter (Tab 2)
-Convert Excel wireframes to structured JSON:
+### 🛡️ Wireframe Validator (Tab 2)
+Bidirectional field-level comparison of wireframe XLSX design documents against O9 report JSON exports:
 
-- **Wireframe Mode** — auto-detects colored section banners (Filter AOP, Dimensions, Measure, etc.) and parses each section with its own headers
-- **Flat Table Mode** — standard row-to-JSON conversion with configurable header row
-- Compare converted output against a reference JSON
-- PDF download for comparison results
+- **Smart Wireframe Parsing** — purpose-built parser that correctly handles filter sub-type labels, continuation rows, and section banners
+- **O9 JSON Normalization** — extracts filters, dimensions, and measures from the dual LevelAttributes structure
+- **Bidirectional comparison** — flags mismatches on EITHER side (wireframe errors or report errors)
+- **3-section validation** — Filters (9 fields), Dimensions (10 fields), Measures (10 fields) compared field-by-field
+- **Dashboard view** — match score, collapsible section tables with color-coded verdicts
+- Print / Save as PDF for validation reports
 
 ### 🔧 JSON Flattener (Tab 3)
 Flatten deeply nested JSON into single-level key-value pairs:
@@ -45,7 +47,7 @@ Flatten deeply nested JSON into single-level key-value pairs:
 | XLSX Parsing | pandas + openpyxl | Most robust Excel parsing in Python |
 | JSON Diffing | deepdiff | Handles nested diffs, type changes, list reordering |
 | Frontend | React 19 + Tailwind CSS v4 | Fast, responsive UI with modern design tokens |
-| Report Export | Jinja2 HTML + html2pdf.js | Styled, portable PDF/HTML reports |
+| Report Export | Jinja2 HTML + browser print | Styled, portable PDF/HTML reports |
 
 ## Local Setup
 
@@ -83,10 +85,11 @@ The app will be available at `http://localhost:5173`. The Vite dev server proxie
 | POST | `/api/compare-json` | Compare two JSON files (auto-detects O9 structured vs flat) |
 | POST | `/api/compare-json-body` | Compare two JSON objects passed in request body |
 
-### Conversion
+### Conversion & Validation
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| POST | `/api/wireframe-compare` | **Validate wireframe XLSX against O9 report JSON** (bidirectional) |
 | POST | `/api/wireframe-to-json` | Convert O9 wireframe XLSX to structured JSON |
 | POST | `/api/wireframe-preview` | Quick-detect sections in a wireframe without full parsing |
 | POST | `/api/xlsx-to-json` | Convert flat XLSX table to JSON |
@@ -128,7 +131,8 @@ qa-automation-engine/
 │       ├── json_diff.py           # DeepDiff comparison logic
 │       ├── unified_diff.py        # Unified flat diff engine for O9 reports
 │       ├── section_diff.py        # Section-aware diff engine for O9 reports
-│       ├── wireframe_parser.py    # O9 wireframe XLSX parser
+│       ├── wireframe_comparator.py # Wireframe vs O9 report comparison engine
+│       ├── wireframe_parser.py    # O9 wireframe XLSX parser (generic)
 │       ├── xlsx_parser.py         # Flat XLSX table parser
 │       └── json_flatten.py        # Recursive flatten logic
 ├── frontend/
@@ -146,7 +150,7 @@ qa-automation-engine/
 │           ├── FileUploadZone.jsx  # Drag-and-drop file upload
 │           ├── JsonComparator.jsx  # Tab 1: JSON comparison orchestrator
 │           ├── UnifiedResultsView.jsx # 5-column comparison table
-│           ├── XlsxConverter.jsx  # Tab 2: Wireframe/XLSX converter
+│           ├── XlsxConverter.jsx  # Tab 2: Wireframe Validator
 │           ├── JsonFlattener.jsx  # Tab 3: JSON flattener
 │           ├── DiffTable.jsx      # Flat diff results table
 │           ├── SummaryCard.jsx    # Match score summary cards
