@@ -11,12 +11,14 @@ import {
   ChevronRight,
   Copy,
   FileSpreadsheet,
+  Printer,
 } from "lucide-react";
 import { API_BASE } from "../lib/utils";
 import FileUploadZone from "./FileUploadZone";
 import SummaryCard from "./SummaryCard";
 import DiffTable from "./DiffTable";
 import JsonTreeViewer from "./JsonTreeViewer";
+import UnifiedResultsView from "./UnifiedResultsView";
 
 /**
  * Section badge shown in wireframe preview results.
@@ -102,6 +104,13 @@ export default function XlsxConverter() {
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
+  // Unified comparison results (for wireframe-vs-JSON comparison)
+  const [unifiedResults, setUnifiedResults] = useState(null);
+
+  // Report names for PDF export
+  const [nameA, setNameA] = useState("Wireframe");
+  const [nameB, setNameB] = useState("Reference JSON");
+
   const [options, setOptions] = useState({
     sheet_name: "",
     header_row: 1,
@@ -116,8 +125,11 @@ export default function XlsxConverter() {
       setResults(null);
       setJsonOutput(null);
       setPreview(null);
+      setUnifiedResults(null);
 
       if (!file) return;
+
+      if (file) setNameA(file.name.replace(/\.(xlsx|xls)$/i, ""));
 
       // Auto-preview in wireframe mode
       if (mode === "wireframe") {
@@ -203,15 +215,52 @@ export default function XlsxConverter() {
       if (compare) {
         setResults(data);
         setJsonOutput(null);
+        setUnifiedResults(null);
         toast.success("Conversion & comparison complete!");
       } else {
         setJsonOutput(data);
         setResults(null);
+        setUnifiedResults(null);
+
+        // If we have both wireframe output and reference, auto-compare
         const sectionCount = data.section_order?.length;
         if (sectionCount) {
           toast.success(
             `Parsed ${sectionCount} section(s) with ${Object.values(data.sections || {}).reduce((a, s) => a + (s.data?.length || 0), 0)} total records`
           );
+
+          // If reference JSON is uploaded, auto-trigger unified comparison
+          if (referenceFile && data.sections) {
+            try {
+              const refContent = await referenceFile.text();
+              const refJson = JSON.parse(refContent);
+
+              // If reference is also O9-structured, use unified diff
+              if (refJson.sections && typeof refJson.sections === "object") {
+                const compareRes = await fetch(`${API_BASE}/compare-json-body`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    baseline: data,
+                    target: refJson,
+                    name_a: nameA,
+                    name_b: nameB,
+                  }),
+                });
+                if (compareRes.ok) {
+                  const compareData = await compareRes.json();
+                  if (compareData.mode === "unified") {
+                    compareData.report_a_name = nameA;
+                    compareData.report_b_name = nameB;
+                    setUnifiedResults(compareData);
+                    toast.success(`Auto-compared — ${compareData.summary.match_percentage}% match`);
+                  }
+                }
+              }
+            } catch {
+              // Auto-compare is best-effort, don't block
+            }
+          }
         } else {
           toast.success("Converted to JSON!");
         }
@@ -242,6 +291,46 @@ export default function XlsxConverter() {
     toast.success("Copied to clipboard");
   };
 
+  /* ── PDF Export for comparison results ── */
+  const handleExportPDF = async () => {
+    if (!results) return;
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const res = await fetch(`${API_BASE}/export-report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(results),
+      });
+      if (!res.ok) throw new Error("Report generation failed");
+      const html = await res.text();
+
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      container.style.position = "absolute";
+      container.style.left = "-9999px";
+      container.style.top = "0";
+      document.body.appendChild(container);
+
+      await html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: `wireframe_comparison_${new Date().toISOString().slice(0, 10)}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: "mm", format: "a3", orientation: "landscape" },
+          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+        })
+        .from(container)
+        .save();
+
+      document.body.removeChild(container);
+      toast.success("PDF downloaded!");
+    } catch (e) {
+      console.error("PDF export error:", e);
+      toast.error(e.message || "PDF export failed");
+    }
+  };
+
   const isWireframeOutput =
     jsonOutput && jsonOutput.sections && jsonOutput.section_order;
 
@@ -255,6 +344,7 @@ export default function XlsxConverter() {
             setJsonOutput(null);
             setResults(null);
             setPreview(null);
+            setUnifiedResults(null);
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
             mode === "wireframe"
@@ -271,6 +361,7 @@ export default function XlsxConverter() {
             setJsonOutput(null);
             setResults(null);
             setPreview(null);
+            setUnifiedResults(null);
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
             mode === "flat"
@@ -296,8 +387,11 @@ export default function XlsxConverter() {
           />
           <FileUploadZone
             file={referenceFile}
-            onFileChange={setReferenceFile}
-            label="Reference JSON"
+            onFileChange={(f) => {
+              setReferenceFile(f);
+              if (f) setNameB(f.name.replace(/\.(json)$/i, ""));
+            }}
+            label="Reference JSON (for comparison)"
             accept=".json"
             id="upload-ref-json"
           />
@@ -466,9 +560,26 @@ export default function XlsxConverter() {
         </div>
       )}
 
-      {/* Comparison results */}
+      {/* Unified comparison results (5-column table with PDF export) */}
+      {unifiedResults && (
+        <UnifiedResultsView results={unifiedResults} nameA={nameA} nameB={nameB} />
+      )}
+
+      {/* Flat comparison results with PDF export */}
       {results && (
         <div className="animate-fade-in-up space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-semibold text-slate-700">Comparison Results</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download PDF
+              </button>
+            </div>
+          </div>
           <SummaryCard summary={results.summary} />
           <DiffTable differences={results.differences} />
         </div>
@@ -571,7 +682,7 @@ export default function XlsxConverter() {
       )}
 
       {/* Empty state */}
-      {!results && !jsonOutput && !loadingConvert && !loadingCompare && (
+      {!results && !jsonOutput && !unifiedResults && !loadingConvert && !loadingCompare && (
         <div className="text-center py-12 text-slate-400">
           <FileSpreadsheet className="w-10 h-10 mx-auto mb-3 text-slate-300" />
           <p className="text-sm">

@@ -16,56 +16,55 @@ import {
   ChevronRight,
   Filter,
   X,
+  CircleDot,
 } from "lucide-react";
 import { API_BASE, cn } from "../lib/utils";
 
 /* ─────────────────────────────────────────────
-   Status Badge
+   Verdict Badge — the "Final Verdict" column
    ───────────────────────────────────────────── */
-function StatusBadge({ status }) {
+function VerdictBadge({ status }) {
   const config = {
     identical: {
       bg: "bg-emerald-50",
-      text: "text-emerald-600",
+      text: "text-emerald-700",
       border: "border-emerald-200",
-      label: "Identical",
+      label: "✅ Match",
       icon: CheckCircle2,
     },
     modified: {
       bg: "bg-amber-50",
-      text: "text-amber-600",
+      text: "text-amber-700",
       border: "border-amber-200",
-      label: "Modified",
+      label: "❌ Mismatch",
       icon: AlertTriangle,
     },
     only_in_a: {
       bg: "bg-red-50",
-      text: "text-red-600",
+      text: "text-red-700",
       border: "border-red-200",
-      label: "Only in 1",
+      label: "⚠️ Only in Report 1",
       icon: XCircle,
     },
     only_in_b: {
       bg: "bg-blue-50",
-      text: "text-blue-600",
+      text: "text-blue-700",
       border: "border-blue-200",
-      label: "Only in 2",
+      label: "⚠️ Only in Report 2",
       icon: PlusCircle,
     },
   };
   const c = config[status] || config.modified;
-  const Icon = c.icon;
 
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full font-bold uppercase tracking-wider border px-2 py-0.5 text-[9px]",
+        "inline-flex items-center gap-1.5 rounded-full font-bold tracking-wide border px-2.5 py-1 text-[10px] whitespace-nowrap",
         c.bg,
         c.text,
         c.border
       )}
     >
-      <Icon className="w-2.5 h-2.5" />
       {c.label}
     </span>
   );
@@ -109,8 +108,22 @@ function getSectionColor(section) {
   return "bg-slate-100 text-slate-600 border-slate-200";
 }
 
+/* ─────────────────────────────────────────────
+   Build "JSON Difference" description from item + field
+   ───────────────────────────────────────────── */
+function formatDifference(row) {
+  // Combine item and field into readable description
+  if (row.item === "—" || row.item === "\u2014") {
+    return row.field;
+  }
+  if (row.field === "(all fields)") {
+    return row.item;
+  }
+  return `${row.item} → ${row.field}`;
+}
+
 /* ═════════════════════════════════════════════
-   MAIN UNIFIED RESULTS VIEW
+   MAIN UNIFIED RESULTS VIEW — 5 Column Table
    ═════════════════════════════════════════════ */
 export default function UnifiedResultsView({ results, nameA, nameB }) {
   const [showIdentical, setShowIdentical] = useState(false);
@@ -271,6 +284,7 @@ export default function UnifiedResultsView({ results, nameA, nameB }) {
   if (!results) return null;
 
   const summary = results.summary || {};
+  const totalDiffs = (summary.modified || 0) + (summary.only_in_a || 0) + (summary.only_in_b || 0);
 
   return (
     <div className="animate-fade-in-up space-y-5">
@@ -337,6 +351,35 @@ export default function UnifiedResultsView({ results, nameA, nameB }) {
         />
       </div>
 
+      {/* ── Match Score Progress Bar ── */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-600">Overall Match</span>
+          <span className={cn(
+            "text-sm font-extrabold",
+            summary.match_percentage >= 80 ? "text-emerald-600" :
+            summary.match_percentage >= 50 ? "text-amber-600" : "text-red-600"
+          )}>
+            {summary.match_percentage}%
+          </span>
+        </div>
+        <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-700 ease-out",
+              summary.match_percentage >= 80 ? "bg-gradient-to-r from-emerald-400 to-emerald-500" :
+              summary.match_percentage >= 50 ? "bg-gradient-to-r from-amber-400 to-amber-500" :
+              "bg-gradient-to-r from-red-400 to-red-500"
+            )}
+            style={{ width: `${summary.match_percentage}%` }}
+          />
+        </div>
+        <div className="flex justify-between mt-2 text-[10px] text-slate-400 font-medium">
+          <span>{summary.identical || 0} identical</span>
+          <span>{totalDiffs} difference{totalDiffs !== 1 ? "s" : ""}</span>
+        </div>
+      </div>
+
       {/* ── Filter & search bar ── */}
       <div className="bg-white rounded-xl border border-slate-200 p-3 flex flex-wrap items-center gap-3">
         {/* Search */}
@@ -386,7 +429,7 @@ export default function UnifiedResultsView({ results, nameA, nameB }) {
         <div className="flex items-center gap-1">
           {[
             { key: "all", label: "All", count: results.rows?.length || 0 },
-            { key: "modified", label: "Modified", count: statusCounts.modified || 0 },
+            { key: "modified", label: "Mismatch", count: statusCounts.modified || 0 },
             { key: "only_in_a", label: `Only in ${nameA}`, count: statusCounts.only_in_a || 0 },
             { key: "only_in_b", label: `Only in ${nameB}`, count: statusCounts.only_in_b || 0 },
           ].map((f) => (
@@ -425,39 +468,39 @@ export default function UnifiedResultsView({ results, nameA, nameB }) {
         </button>
       </div>
 
-      {/* ── Comparison Table ── */}
+      {/* ── 5-Column Comparison Table ── */}
       <div
         ref={tableRef}
         className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col"
       >
         {/* Table header info */}
         <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center">
-          <h3 className="font-semibold text-slate-800 text-sm">
+          <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+            <CircleDot className="w-4 h-4 text-accent" />
             Field-by-Field Comparison
-            <span className="ml-2 text-xs text-slate-400 font-normal">
+            <span className="ml-1 text-xs text-slate-400 font-normal">
               ({filteredRows.length} row{filteredRows.length !== 1 ? "s" : ""})
             </span>
           </h3>
         </div>
 
-        {/* Table */}
+        {/* Table — 5 Columns */}
         <div className="overflow-auto max-h-[600px]">
           <table className="w-full text-sm text-left">
             <thead className="text-[10px] text-slate-500 uppercase bg-slate-50 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-2.5 font-semibold w-[13%]">Section</th>
-                <th className="px-4 py-2.5 font-semibold w-[15%]">Item</th>
-                <th className="px-4 py-2.5 font-semibold w-[13%]">Field</th>
-                <th className="px-4 py-2.5 font-semibold w-[22%]">{nameA}</th>
-                <th className="px-4 py-2.5 font-semibold w-[22%]">{nameB}</th>
-                <th className="px-4 py-2.5 font-semibold w-[15%]">Status</th>
+                <th className="px-4 py-3 font-semibold w-[15%]">Difference Features</th>
+                <th className="px-4 py-3 font-semibold w-[20%]">JSON Difference</th>
+                <th className="px-4 py-3 font-semibold w-[22%]">Element in {nameA}</th>
+                <th className="px-4 py-3 font-semibold w-[22%]">Element in {nameB}</th>
+                <th className="px-4 py-3 font-semibold w-[21%]">Final Verdict</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paginatedRows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-5 py-12 text-center text-slate-400 text-sm"
                   >
                     {filteredRows.length === 0 && !showIdentical
@@ -476,26 +519,24 @@ export default function UnifiedResultsView({ results, nameA, nameB }) {
                     row.status === "only_in_b" && "bg-blue-50/20"
                   )}
                 >
-                  {/* Section */}
+                  {/* Col 1: Difference Features (Section) */}
                   <td className="px-4 py-2.5">
                     <span
                       className={cn(
-                        "inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border",
+                        "inline-block px-2.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border",
                         getSectionColor(row.section)
                       )}
                     >
                       {row.section}
                     </span>
                   </td>
-                  {/* Item */}
-                  <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">
-                    {row.item}
+                  {/* Col 2: JSON Difference (Item → Field) */}
+                  <td className="px-4 py-2.5">
+                    <div className="text-xs font-semibold text-slate-700">
+                      {formatDifference(row)}
+                    </div>
                   </td>
-                  {/* Field */}
-                  <td className="px-4 py-2.5 text-xs font-medium text-slate-600">
-                    {row.field}
-                  </td>
-                  {/* Report A value */}
+                  {/* Col 3: Element in Report 1 */}
                   <td
                     className={cn(
                       "px-4 py-2.5 font-mono text-xs break-all",
@@ -506,7 +547,7 @@ export default function UnifiedResultsView({ results, nameA, nameB }) {
                   >
                     {row.report_a}
                   </td>
-                  {/* Report B value */}
+                  {/* Col 4: Element in Report 2 */}
                   <td
                     className={cn(
                       "px-4 py-2.5 font-mono text-xs break-all",
@@ -517,9 +558,9 @@ export default function UnifiedResultsView({ results, nameA, nameB }) {
                   >
                     {row.report_b}
                   </td>
-                  {/* Status */}
+                  {/* Col 5: Final Verdict */}
                   <td className="px-4 py-2.5">
-                    <StatusBadge status={row.status} />
+                    <VerdictBadge status={row.status} />
                   </td>
                 </tr>
               ))}

@@ -3,6 +3,13 @@
 Renders the unified diff output (a single flat table of all field-level
 comparisons across all sections) as a styled HTML document optimized
 for browser viewing and html2pdf.js client-side PDF conversion.
+
+Uses the 5-column format:
+  1. Difference Features (section name)
+  2. JSON Difference (item → field)
+  3. Element in Report 1
+  4. Element in Report 2
+  5. Final Verdict
 """
 
 from fastapi import APIRouter, HTTPException
@@ -135,7 +142,6 @@ UNIFIED_REPORT_TEMPLATE = """
         .color-red { color: #DC2626; }
         .color-amber { color: #D97706; }
         .color-slate { color: #334155; }
-        .color-indigo { color: #4F46E5; }
 
         /* Table */
         .table-container {
@@ -198,35 +204,36 @@ UNIFIED_REPORT_TEMPLATE = """
         /* Section column styling */
         .section-cell {
             font-family: 'Inter', sans-serif;
-            font-weight: 600;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            white-space: nowrap;
-        }
-        .section-metadata { color: #6366F1; }
-        .section-filter { color: #0891B2; }
-        .section-dimensions { color: #7C3AED; }
-        .section-measures { color: #059669; }
-        .section-settings { color: #D97706; }
-        .section-kpi { color: #DC2626; }
-        .section-default { color: #475569; }
-
-        /* Status badges */
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 8px;
             font-weight: 700;
+            font-size: 9px;
             text-transform: uppercase;
             letter-spacing: 0.04em;
             white-space: nowrap;
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
         }
-        .badge-identical { background: #F1F5F9; color: #94A3B8; }
-        .badge-modified { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
-        .badge-only_in_a { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
-        .badge-only_in_b { background: #DBEAFE; color: #2563EB; border: 1px solid #BFDBFE; }
+        .section-metadata { background: #E0E7FF; color: #4338CA; }
+        .section-filter { background: #CFFAFE; color: #0E7490; }
+        .section-dimensions { background: #EDE9FE; color: #6D28D9; }
+        .section-measures { background: #D1FAE5; color: #047857; }
+        .section-settings { background: #FEF3C7; color: #B45309; }
+        .section-kpi { background: #FFE4E6; color: #BE123C; }
+        .section-default { background: #F1F5F9; color: #475569; }
+
+        /* Verdict badges */
+        .verdict {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .verdict-match { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+        .verdict-mismatch { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
+        .verdict-only_in_a { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
+        .verdict-only_in_b { background: #DBEAFE; color: #2563EB; border: 1px solid #BFDBFE; }
 
         /* Row highlighting */
         tr.row-modified { background: #FFFBEB; }
@@ -268,7 +275,7 @@ UNIFIED_REPORT_TEMPLATE = """
     <div class="container">
         <!-- Header -->
         <div class="report-header">
-            <h1>O9 Report Comparison</h1>
+            <h1>QA Automation Engine — Report Comparison</h1>
             <p class="subtitle">Generated on {{ date }}</p>
             <div class="vs-badge">
                 <span class="name">{{ report_a_name }}</span>
@@ -301,21 +308,20 @@ UNIFIED_REPORT_TEMPLATE = """
             </div>
         </div>
 
-        <!-- Comparison Table -->
+        <!-- 5-Column Comparison Table -->
         <div class="table-container">
             <div class="table-title">
-                <span>📊 Field-by-Field Comparison (Differences Only)</span>
+                <span>Field-by-Field Comparison (Differences Only)</span>
                 <span class="count">{{ diff_rows | length }} difference{{ 's' if diff_rows | length != 1 else '' }} found</span>
             </div>
             <table>
                 <thead>
                     <tr>
-                        <th style="width:12%">Section</th>
-                        <th style="width:15%">Item</th>
-                        <th style="width:13%">Field</th>
-                        <th style="width:23%">{{ report_a_name }}</th>
-                        <th style="width:23%">{{ report_b_name }}</th>
-                        <th style="width:14%">Status</th>
+                        <th style="width:14%">Difference Features</th>
+                        <th style="width:20%">JSON Difference</th>
+                        <th style="width:23%">Element in {{ report_a_name }}</th>
+                        <th style="width:23%">Element in {{ report_b_name }}</th>
+                        <th style="width:20%">Final Verdict</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -324,21 +330,40 @@ UNIFIED_REPORT_TEMPLATE = """
                     {% if row.section != current_section.value %}
                     {% set current_section.value = row.section %}
                     <tr class="section-separator">
-                        <td colspan="6">{{ row.section }}</td>
+                        <td colspan="5">{{ row.section }}</td>
                     </tr>
                     {% endif %}
                     <tr class="row-{{ row.status }}">
-                        <td class="section-cell {% if 'metadata' in row.section.lower() %}section-metadata{% elif 'filter' in row.section.lower() %}section-filter{% elif 'dimension' in row.section.lower() %}section-dimensions{% elif 'measure' in row.section.lower() %}section-measures{% elif 'setting' in row.section.lower() %}section-settings{% elif 'kpi' in row.section.lower() %}section-kpi{% else %}section-default{% endif %}">{{ row.section }}</td>
-                        <td style="font-weight: 500;">{{ row.item }}</td>
-                        <td style="font-weight: 500; color: #475569;">{{ row.field }}</td>
+                        <td>
+                            <span class="section-cell {% if 'metadata' in row.section.lower() %}section-metadata{% elif 'filter' in row.section.lower() %}section-filter{% elif 'dimension' in row.section.lower() %}section-dimensions{% elif 'measure' in row.section.lower() %}section-measures{% elif 'setting' in row.section.lower() %}section-settings{% elif 'kpi' in row.section.lower() %}section-kpi{% else %}section-default{% endif %}">{{ row.section }}</span>
+                        </td>
+                        <td style="font-weight: 600; color: #334155;">
+                            {% if row.item == '—' or row.item == '\u2014' %}
+                                {{ row.field }}
+                            {% elif row.field == '(all fields)' %}
+                                {{ row.item }}
+                            {% else %}
+                                {{ row.item }} → {{ row.field }}
+                            {% endif %}
+                        </td>
                         <td class="mono">{{ row.report_a }}</td>
                         <td class="mono">{{ row.report_b }}</td>
-                        <td><span class="badge badge-{{ row.status }}">{{ row.status | replace('_', ' ') }}</span></td>
+                        <td>
+                            {% if row.status == 'identical' %}
+                            <span class="verdict verdict-match">✅ Match</span>
+                            {% elif row.status == 'modified' %}
+                            <span class="verdict verdict-mismatch">❌ Mismatch</span>
+                            {% elif row.status == 'only_in_a' %}
+                            <span class="verdict verdict-only_in_a">⚠️ Only in {{ report_a_name }}</span>
+                            {% elif row.status == 'only_in_b' %}
+                            <span class="verdict verdict-only_in_b">⚠️ Only in {{ report_b_name }}</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                     {% if diff_rows | length == 0 %}
                     <tr>
-                        <td colspan="6" style="text-align: center; padding: 40px; color: #94A3B8; font-size: 13px;">
+                        <td colspan="5" style="text-align: center; padding: 40px; color: #94A3B8; font-size: 13px;">
                             ✅ No differences found — reports are identical.
                         </td>
                     </tr>
@@ -361,9 +386,14 @@ UNIFIED_REPORT_TEMPLATE = """
 async def export_unified_report(request: UnifiedExportRequest):
     """Generate a styled HTML report for unified flat-table comparison results.
 
-    The output HTML is optimized for both browser viewing and PDF export
-    (via browser print or html2pdf.js client-side conversion). Only
-    non-identical rows are included in the PDF output for clarity.
+    The output HTML uses the 5-column format:
+    1. Difference Features
+    2. JSON Difference
+    3. Element in Report 1
+    4. Element in Report 2
+    5. Final Verdict
+
+    Only non-identical rows are included in the PDF output for clarity.
     """
     try:
         # Filter out identical rows for the PDF — only show differences

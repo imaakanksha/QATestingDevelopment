@@ -1,19 +1,32 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import toast from "react-hot-toast";
-import { Loader2, Minimize2, Copy, Download, ArrowRight } from "lucide-react";
-import { API_BASE } from "../lib/utils";
+import { Loader2, Minimize2, Copy, Download, ArrowRight, Upload, FileText, Table2 } from "lucide-react";
+import { API_BASE, formatFileSize } from "../lib/utils";
 import JsonTreeViewer from "./JsonTreeViewer";
 
 export default function JsonFlattener() {
   const [rawJson, setRawJson] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  const [viewMode, setViewMode] = useState("table"); // "table" or "tree"
+  const fileInputRef = useRef(null);
 
   const [options, setOptions] = useState({
     separator: ".",
     max_depth: "",
     preserve_arrays: false,
   });
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setRawJson(ev.target.result);
+      toast.success(`Loaded ${file.name} (${formatFileSize(file.size)})`);
+    };
+    reader.readAsText(file);
+  };
 
   const handleFlatten = async () => {
     if (!rawJson.trim()) return toast.error("Paste some JSON to flatten");
@@ -67,6 +80,23 @@ export default function JsonFlattener() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadCSV = () => {
+    if (!results?.flattened) return;
+    const lines = ["Key,Value"];
+    Object.entries(results.flattened).forEach(([k, v]) => {
+      const escapedVal = String(v).replace(/"/g, '""');
+      lines.push(`"${k}","${escapedVal}"`);
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "flattened.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV downloaded!");
+  };
+
   return (
     <div className="space-y-6">
       {/* Input section */}
@@ -74,15 +104,47 @@ export default function JsonFlattener() {
         <div className="flex gap-5">
           {/* Textarea */}
           <div className="flex-1">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Raw JSON Input
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Raw JSON Input
+              </label>
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium border border-slate-200"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload JSON File
+                </button>
+                {rawJson && (
+                  <button
+                    onClick={() => { setRawJson(""); setResults(null); }}
+                    className="text-xs text-slate-400 hover:text-slate-600 font-medium px-2"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
             <textarea
               className="w-full h-44 bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all resize-none"
               placeholder='{"paste": {"your": {"nested": "json"}}}'
               value={rawJson}
               onChange={(e) => setRawJson(e.target.value)}
             />
+            {rawJson && (
+              <div className="mt-1.5 text-[10px] text-slate-400 font-medium">
+                {rawJson.length.toLocaleString()} characters
+                {(() => { try { return ` · ${typeof JSON.parse(rawJson) === "object" ? "Valid JSON ✓" : "Valid JSON ✓"}`; } catch { return " · ❌ Invalid JSON"; } })()}
+              </div>
+            )}
           </div>
 
           {/* Options panel */}
@@ -149,6 +211,25 @@ export default function JsonFlattener() {
               </div>
             </div>
             <div className="flex gap-2">
+              {/* View mode toggle */}
+              <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                    viewMode === "table" ? "bg-white text-accent shadow-sm" : "text-slate-500"
+                  }`}
+                >
+                  <Table2 className="w-3 h-3 inline mr-1" />Table
+                </button>
+                <button
+                  onClick={() => setViewMode("tree")}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                    viewMode === "tree" ? "bg-white text-accent shadow-sm" : "text-slate-500"
+                  }`}
+                >
+                  <FileText className="w-3 h-3 inline mr-1" />Tree
+                </button>
+              </div>
               <button
                 onClick={copyToClipboard}
                 className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium"
@@ -156,36 +237,110 @@ export default function JsonFlattener() {
                 <Copy className="w-3.5 h-3.5" /> Copy
               </button>
               <button
+                onClick={downloadCSV}
+                className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium"
+              >
+                <Download className="w-3.5 h-3.5" /> CSV
+              </button>
+              <button
                 onClick={downloadJson}
                 className="flex items-center gap-1.5 text-xs bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
-                <Download className="w-3.5 h-3.5" /> Download
+                <Download className="w-3.5 h-3.5" /> JSON
               </button>
             </div>
           </div>
 
-          {/* Side-by-side view */}
-          <div className="grid grid-cols-2 divide-x divide-slate-200">
-            <div className="p-4">
-              <div className="text-[11px] text-slate-500 mb-2 uppercase font-semibold tracking-wider">
-                Original JSON
-              </div>
-              <JsonTreeViewer data={JSON.parse(rawJson)} />
+          {/* Table view — clean key-value table */}
+          {viewMode === "table" && (
+            <div className="overflow-auto max-h-[600px]">
+              <table className="w-full text-sm text-left">
+                <thead className="text-[10px] text-slate-500 uppercase bg-slate-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-5 py-2.5 font-semibold w-[5%]">#</th>
+                    <th className="px-5 py-2.5 font-semibold w-[55%]">Key Path</th>
+                    <th className="px-5 py-2.5 font-semibold w-[30%]">Value</th>
+                    <th className="px-5 py-2.5 font-semibold w-[10%]">Type</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {Object.entries(results.flattened).map(([key, value], i) => {
+                    const valType = value === null ? "null" : typeof value;
+                    const typeColor = {
+                      string: "text-green-600 bg-green-50 border-green-200",
+                      number: "text-blue-600 bg-blue-50 border-blue-200",
+                      boolean: "text-purple-600 bg-purple-50 border-purple-200",
+                      null: "text-slate-400 bg-slate-50 border-slate-200",
+                      object: "text-amber-600 bg-amber-50 border-amber-200",
+                    }[valType] || "text-slate-500 bg-slate-50 border-slate-200";
+
+                    return (
+                      <tr key={key} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-5 py-2 text-[10px] text-slate-400 font-mono">{i + 1}</td>
+                        <td className="px-5 py-2 font-mono text-xs text-slate-700 break-all">
+                          {key.split(options.separator).map((part, pi, arr) => (
+                            <span key={pi}>
+                              {pi > 0 && <span className="text-slate-300 mx-0.5">{options.separator}</span>}
+                              <span className={pi === arr.length - 1 ? "text-accent font-semibold" : "text-slate-500"}>
+                                {part}
+                              </span>
+                            </span>
+                          ))}
+                        </td>
+                        <td className="px-5 py-2 font-mono text-xs text-slate-700 break-all">
+                          {value === null ? (
+                            <span className="text-slate-400 italic">null</span>
+                          ) : typeof value === "boolean" ? (
+                            <span className="text-purple-600 font-semibold">{String(value)}</span>
+                          ) : typeof value === "number" ? (
+                            <span className="text-blue-600 font-semibold">{value}</span>
+                          ) : typeof value === "string" ? (
+                            <span className="text-green-700">"{value}"</span>
+                          ) : (
+                            JSON.stringify(value)
+                          )}
+                        </td>
+                        <td className="px-5 py-2">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${typeColor}`}>
+                            {valType}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <div className="p-4">
-              <div className="text-[11px] text-accent mb-2 uppercase font-semibold tracking-wider">
-                Flattened JSON
+          )}
+
+          {/* Tree view — side-by-side */}
+          {viewMode === "tree" && (
+            <div className="grid grid-cols-2 divide-x divide-slate-200">
+              <div className="p-4">
+                <div className="text-[11px] text-slate-500 mb-2 uppercase font-semibold tracking-wider">
+                  Original JSON
+                </div>
+                <JsonTreeViewer data={JSON.parse(rawJson)} />
               </div>
-              <JsonTreeViewer data={results.flattened} />
+              <div className="p-4">
+                <div className="text-[11px] text-accent mb-2 uppercase font-semibold tracking-wider">
+                  Flattened JSON
+                </div>
+                <JsonTreeViewer data={results.flattened} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Empty state */}
       {!results && !loading && (
         <div className="text-center py-12 text-slate-400">
-          <p className="text-sm">Paste nested JSON and click "Flatten JSON" to see the flattened output.</p>
+          <Minimize2 className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+          <p className="text-sm font-medium text-slate-500 mb-1">Paste or upload nested JSON</p>
+          <p className="text-xs text-slate-400">
+            Click "Flatten JSON" to transform deeply nested structures into flat key-value pairs.
+          </p>
         </div>
       )}
     </div>

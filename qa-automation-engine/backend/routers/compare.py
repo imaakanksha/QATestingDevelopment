@@ -2,8 +2,9 @@
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 import json
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from models.schemas import DiffResponse
 from services.json_diff import compute_json_diff
@@ -12,6 +13,14 @@ from services.unified_diff import compute_unified_diff
 from services.wireframe_parser import parse_wireframe_to_json
 
 router = APIRouter()
+
+
+class CompareJsonBodyRequest(BaseModel):
+    """Request body for JSON comparison via body (not file upload)."""
+    baseline: Dict[str, Any]
+    target: Dict[str, Any]
+    name_a: str = "Report A"
+    name_b: str = "Report B"
 
 
 def _is_o9_structured(data: dict) -> bool:
@@ -137,3 +146,35 @@ async def compare_reports_endpoint(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
+
+
+@router.post("/compare-json-body")
+async def compare_json_body(request: CompareJsonBodyRequest):
+    """Compare two JSON objects passed directly in the request body.
+
+    Useful for comparing wireframe output against reference JSON
+    without requiring file uploads.
+    """
+    try:
+        baseline_dict = request.baseline
+        target_dict = request.target
+
+        if _is_o9_structured(baseline_dict) and _is_o9_structured(target_dict):
+            result = compute_unified_diff(
+                baseline_dict, target_dict,
+                request.name_a, request.name_b
+            )
+            result["mode"] = "unified"
+            return result
+        else:
+            flat_result = compute_json_diff(baseline_dict, target_dict)
+            return {
+                "mode": "flat",
+                "summary": flat_result.summary.model_dump(),
+                "differences": [d.model_dump() for d in flat_result.differences],
+            }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
+
