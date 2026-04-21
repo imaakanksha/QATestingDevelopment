@@ -113,13 +113,13 @@ function getSectionColor(section) {
    ───────────────────────────────────────────── */
 function formatDifference(row) {
   // Combine item and field into readable description
-  if (row.item === "—" || row.item === "\u2014") {
+  if (row.item === "--" || row.item === "\u2014") {
     return row.field;
   }
   if (row.field === "(all fields)") {
     return row.item;
   }
-  return `${row.item} → ${row.field}`;
+  return `${row.item} \u2192 ${row.field}`;
 }
 
 /* ═════════════════════════════════════════════

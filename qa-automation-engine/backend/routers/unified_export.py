@@ -338,7 +338,7 @@ UNIFIED_REPORT_TEMPLATE = """
                             <span class="section-cell {% if 'metadata' in row.section.lower() %}section-metadata{% elif 'filter' in row.section.lower() %}section-filter{% elif 'dimension' in row.section.lower() %}section-dimensions{% elif 'measure' in row.section.lower() %}section-measures{% elif 'setting' in row.section.lower() %}section-settings{% elif 'kpi' in row.section.lower() %}section-kpi{% else %}section-default{% endif %}">{{ row.section }}</span>
                         </td>
                         <td style="font-weight: 600; color: #334155;">
-                            {% if row.item == '—' or row.item == '\u2014' %}
+                            {% if row.item == '--' or row.item == '\u2014' or row.item == '\u2014' %}
                                 {{ row.field }}
                             {% elif row.field == '(all fields)' %}
                                 {{ row.item }}

@@ -4,9 +4,38 @@ A professional-grade tool that automates report testing and data validation duri
 
 ## Features
 
-- **JSON Comparator** — Upload two JSON files and get a detailed diff report with match score, color-coded change table, inline value highlighting, and exportable HTML report.
-- **XLSX → JSON Converter** — Convert Excel wireframes to structured JSON with options for sheet selection, header row, key mapping, and column name normalization. Optionally compare the converted output against a reference JSON.
-- **JSON Flattener** — Flatten deeply nested JSON into single-level key-value pairs with configurable separator, max depth, and array handling.
+### 🔍 JSON Comparator (Tab 1)
+Upload two JSON files and get a detailed comparison in a **5-column table**:
+
+| Column | Content |
+|--------|---------|
+| **Difference Features** | Section category (Dimensions, Measures, Filters, etc.) |
+| **JSON Difference** | Specific item and field that differs |
+| **Element in Report 1** | Value from the first report |
+| **Element in Report 2** | Value from the second report |
+| **Final Verdict** | ✅ Match / ❌ Mismatch / ⚠️ Only in Report 1/2 |
+
+- Auto-detects O9 structured reports (with `sections` and `section_order`)
+- Falls back to generic DeepDiff for any JSON structure
+- PDF and HTML export for both modes
+- Match score progress bar, search, filtering, pagination
+
+### 📊 XLSX Converter (Tab 2)
+Convert Excel wireframes to structured JSON:
+
+- **Wireframe Mode** — auto-detects colored section banners (Filter AOP, Dimensions, Measure, etc.) and parses each section with its own headers
+- **Flat Table Mode** — standard row-to-JSON conversion with configurable header row
+- Compare converted output against a reference JSON
+- PDF download for comparison results
+
+### 🔧 JSON Flattener (Tab 3)
+Flatten deeply nested JSON into single-level key-value pairs:
+
+- **File upload** or paste JSON directly
+- **Table view** with syntax-highlighted key paths and type badges
+- **Tree view** with side-by-side original vs flattened comparison
+- Download as JSON or CSV
+- Configurable separator, max depth, and array handling
 
 ## Tech Stack
 
@@ -15,8 +44,8 @@ A professional-grade tool that automates report testing and data validation duri
 | Backend | FastAPI (Python) | Async, auto Swagger docs, Pydantic validation |
 | XLSX Parsing | pandas + openpyxl | Most robust Excel parsing in Python |
 | JSON Diffing | deepdiff | Handles nested diffs, type changes, list reordering |
-| Frontend | React + Tailwind CSS v4 | Fast, responsive UI with modern design tokens |
-| Report Export | Jinja2 HTML | Styled, portable, shareable reports |
+| Frontend | React 19 + Tailwind CSS v4 | Fast, responsive UI with modern design tokens |
+| Report Export | Jinja2 HTML + html2pdf.js | Styled, portable PDF/HTML reports |
 
 ## Local Setup
 
@@ -47,51 +76,95 @@ The app will be available at `http://localhost:5173`. The Vite dev server proxie
 
 ## API Endpoints
 
+### Comparison
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/compare-json` | Compare two JSON files |
-| POST | `/api/xlsx-to-json` | Convert XLSX to JSON |
-| POST | `/api/xlsx-sheet-names` | Get sheet names from XLSX |
-| POST | `/api/xlsx-compare` | Convert XLSX & compare against reference JSON |
-| POST | `/api/flatten-json` | Flatten nested JSON |
-| POST | `/api/export-report` | Generate styled HTML diff report |
+| POST | `/api/compare-json` | Compare two JSON files (auto-detects O9 structured vs flat) |
+| POST | `/api/compare-json-body` | Compare two JSON objects passed in request body |
+
+### Conversion
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/wireframe-to-json` | Convert O9 wireframe XLSX to structured JSON |
+| POST | `/api/wireframe-preview` | Quick-detect sections in a wireframe without full parsing |
+| POST | `/api/xlsx-to-json` | Convert flat XLSX table to JSON |
+| POST | `/api/xlsx-sheet-names` | Get sheet names from an XLSX file |
+| POST | `/api/xlsx-compare` | Convert XLSX and compare against reference JSON |
+
+### Flattening
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/flatten-json` | Flatten nested JSON (supports file upload or raw text) |
+
+### Export
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/export-report` | Generate HTML diff report (flat DeepDiff mode) |
+| POST | `/api/export-unified-report` | Generate HTML report (unified 5-column format) |
+| POST | `/api/export-section-report` | Generate HTML report (section-aware O9 format) |
 
 ## Project Structure
 
 ```
 qa-automation-engine/
 ├── backend/
-│   ├── main.py                 # FastAPI app entry point
+│   ├── main.py                    # FastAPI app entry point
 │   ├── requirements.txt
+│   ├── test_api.py                # Quick API test script
 │   ├── models/
-│   │   └── schemas.py          # Pydantic request/response models
+│   │   └── schemas.py             # Pydantic request/response models
 │   ├── routers/
-│   │   ├── compare.py          # /api/compare-json
-│   │   ├── converter.py        # /api/xlsx-to-json, /api/xlsx-compare
-│   │   ├── flattener.py        # /api/flatten-json
-│   │   └── export.py           # /api/export-report
+│   │   ├── compare.py             # /api/compare-json, /api/compare-json-body
+│   │   ├── converter.py           # /api/xlsx-to-json, /api/wireframe-*, /api/xlsx-compare
+│   │   ├── flattener.py           # /api/flatten-json
+│   │   ├── export.py              # /api/export-report (flat diff HTML)
+│   │   ├── unified_export.py      # /api/export-unified-report (5-column HTML)
+│   │   └── report_export.py       # /api/export-section-report (section-aware HTML)
 │   └── services/
-│       ├── json_diff.py        # DeepDiff comparison logic
-│       ├── xlsx_parser.py      # pandas/openpyxl conversion
-│       └── json_flatten.py     # Recursive flatten logic
+│       ├── json_diff.py           # DeepDiff comparison logic
+│       ├── unified_diff.py        # Unified flat diff engine for O9 reports
+│       ├── section_diff.py        # Section-aware diff engine for O9 reports
+│       ├── wireframe_parser.py    # O9 wireframe XLSX parser
+│       ├── xlsx_parser.py         # Flat XLSX table parser
+│       └── json_flatten.py        # Recursive flatten logic
 ├── frontend/
 │   ├── index.html
 │   ├── vite.config.js
 │   ├── package.json
 │   └── src/
-│       ├── index.css           # Tailwind v4 theme & global styles
+│       ├── index.css              # Tailwind v4 theme & global styles
 │       ├── main.jsx
 │       ├── App.jsx
 │       ├── lib/
-│       │   └── utils.js        # Shared utilities (cn, API_BASE)
+│       │   └── utils.js           # Shared utilities (cn, API_BASE, formatFileSize)
 │       └── components/
-│           ├── Sidebar.jsx
-│           ├── FileUploadZone.jsx
-│           ├── JsonComparator.jsx
-│           ├── XlsxConverter.jsx
-│           ├── JsonFlattener.jsx
-│           ├── DiffTable.jsx
-│           ├── SummaryCard.jsx
-│           └── JsonTreeViewer.jsx
+│           ├── Sidebar.jsx        # Navigation sidebar
+│           ├── FileUploadZone.jsx  # Drag-and-drop file upload
+│           ├── JsonComparator.jsx  # Tab 1: JSON comparison orchestrator
+│           ├── UnifiedResultsView.jsx # 5-column comparison table
+│           ├── XlsxConverter.jsx  # Tab 2: Wireframe/XLSX converter
+│           ├── JsonFlattener.jsx  # Tab 3: JSON flattener
+│           ├── DiffTable.jsx      # Flat diff results table
+│           ├── SummaryCard.jsx    # Match score summary cards
+│           └── JsonTreeViewer.jsx # Collapsible JSON tree viewer
+├── test_report_a.json             # Sample O9 report for testing
+├── test_report_b.json             # Sample O9 report for testing
+├── test_wireframe.xlsx            # Sample wireframe for testing
+├── o9_wireframe_sample.xlsx       # Sample O9 wireframe
+├── .gitignore
 └── README.md
 ```
+
+## Testing
+
+```bash
+# Run the backend test script (requires backend running on port 8000)
+cd qa-automation-engine/backend
+python test_api.py
+```
+
+Sample test files (`test_report_a.json`, `test_report_b.json`, `test_wireframe.xlsx`) are included in the root directory for quick validation.

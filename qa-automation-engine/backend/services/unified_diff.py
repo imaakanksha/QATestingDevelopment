@@ -36,9 +36,12 @@ def _pick_row_key(section_key: str, data_keys: set) -> Optional[str]:
 
 
 def _fmt(val: Any) -> str:
-    """Format a value for display."""
+    """Format a value for display.
+
+    Uses '--' instead of em-dash to avoid encoding issues in PDF exports.
+    """
     if val is None:
-        return "—"
+        return "--"
     if isinstance(val, bool):
         return "TRUE" if val else "FALSE"
     return str(val)
