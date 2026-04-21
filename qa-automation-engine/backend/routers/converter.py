@@ -6,6 +6,7 @@ from typing import Optional
 
 from services.xlsx_parser import parse_xlsx_to_json, get_sheet_names
 from services.wireframe_parser import parse_wireframe_to_json, get_wireframe_preview
+from services.wireframe_comparator import normalize_wireframe, normalize_o9_json, compare_reports
 from services.json_diff import compute_json_diff
 from models.schemas import DiffResponse
 
@@ -122,4 +123,62 @@ async def compare_xlsx(
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
+
+
+@router.post("/wireframe-compare")
+async def compare_wireframe_to_report(
+    wireframe_file: UploadFile = File(...),
+    report_file: UploadFile = File(...),
+    sheet_name: Optional[str] = Form(None),
+):
+    """Compare a wireframe XLSX against an O9 report JSON.
+
+    Performs a bidirectional, field-level comparison across three sections:
+    Filters, Dimensions, and Measures. Flags mismatches, missing items
+    on either side, and matching fields.
+    """
+    if not wireframe_file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Wireframe file must be an Excel file (.xlsx)")
+    if not report_file.filename.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="Report file must be a JSON file (.json)")
+
+    try:
+        xlsx_bytes = await wireframe_file.read()
+        if not xlsx_bytes:
+            raise HTTPException(status_code=400, detail="Wireframe file is empty")
+
+        json_bytes = await report_file.read()
+        if not json_bytes:
+            raise HTTPException(status_code=400, detail="Report file is empty")
+
+        o9_data = json.loads(json_bytes)
+
+        wf_normalized = normalize_wireframe(xlsx_bytes, sheet_name)
+        rp_normalized = normalize_o9_json(o9_data)
+        result = compare_reports(wf_normalized, rp_normalized)
+
+        return {
+            "summary": result.summary,
+            "rows": result.rows,
+            "counts": {
+                "wireframe": {
+                    "filters": result.wireframe_filters,
+                    "dimensions": result.wireframe_dimensions,
+                    "measures": result.wireframe_measures,
+                },
+                "report": {
+                    "filters": result.report_filters,
+                    "dimensions": result.report_dimensions,
+                    "measures": result.report_measures,
+                },
+            },
+        }
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON in report file: {e.msg}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")

@@ -16,7 +16,7 @@ function App() {
         <header className="h-16 flex items-center justify-between px-6 border-b border-slate-200 bg-surface z-10 shrink-0 shadow-sm">
           <h1 className="text-xl font-semibold text-slate-800">
             {activeTab === 'comparator' && 'JSON Comparator'}
-            {activeTab === 'converter' && 'Wireframe → JSON Parser'}
+            {activeTab === 'converter' && 'Wireframe Validator'}
             {activeTab === 'flattener' && 'JSON Flattener'}
           </h1>
         </header>

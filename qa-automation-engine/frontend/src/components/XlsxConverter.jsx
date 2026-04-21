@@ -1,703 +1,410 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import {
   Loader2,
-  Settings,
   Download,
-  Layers,
-  Table2,
-  Zap,
+  Printer,
+  Shield,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Copy,
   FileSpreadsheet,
-  Printer,
+  FileJson,
+  BarChart3,
+  Filter,
+  Layers,
+  Activity,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import { API_BASE } from "../lib/utils";
+import { API_BASE, cn, printHtmlReport } from "../lib/utils";
 import FileUploadZone from "./FileUploadZone";
-import SummaryCard from "./SummaryCard";
-import DiffTable from "./DiffTable";
-import JsonTreeViewer from "./JsonTreeViewer";
-import UnifiedResultsView from "./UnifiedResultsView";
 
-/**
- * Section badge shown in wireframe preview results.
- */
-function SectionBadge({ name, row }) {
+/* ═══════════════════════════════════════════════════════
+   STATUS BADGE
+   ═══════════════════════════════════════════════════════ */
+function StatusBadge({ status }) {
+  const config = {
+    match: { icon: CheckCircle2, label: "Match", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    mismatch: { icon: XCircle, label: "Mismatch", cls: "bg-red-50 text-red-700 border-red-200" },
+    only_in_wireframe: { icon: AlertTriangle, label: "Only in Wireframe", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+    only_in_report: { icon: AlertTriangle, label: "Only in Report", cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  };
+  const c = config[status] || config.mismatch;
+  const Icon = c.icon;
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs bg-accent/10 text-accent px-2.5 py-1 rounded-full font-medium">
-      <Layers className="w-3 h-3" />
-      {name}
-      <span className="text-accent/50 text-[10px]">row {row}</span>
+    <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border", c.cls)}>
+      <Icon className="w-3 h-3" />
+      {c.label}
     </span>
   );
 }
 
-/**
- * Collapsible section viewer for wireframe JSON output.
- */
-function SectionViewer({ sectionKey, section, defaultExpanded = false }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const recordCount = section.data?.length ?? 0;
-  const colCount = section.columns?.length ?? 0;
+/* ═══════════════════════════════════════════════════════
+   METRIC CARD
+   ═══════════════════════════════════════════════════════ */
+function MetricCard({ label, value, icon: Icon, color = "text-slate-800" }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4 text-center shadow-sm">
+      {Icon && <Icon className={cn("w-5 h-5 mx-auto mb-1.5", color)} />}
+      <div className={cn("text-2xl font-bold", color)}>{value}</div>
+      <div className="text-[11px] text-slate-500 font-medium mt-0.5">{label}</div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   SECTION TABLE (collapsible)
+   ═══════════════════════════════════════════════════════ */
+function SectionTable({ title, icon: Icon, rows, showMatches }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const filtered = showMatches ? rows : rows.filter((r) => r.status !== "match");
+  const matchCount = rows.filter((r) => r.status === "match").length;
+  const issueCount = rows.length - matchCount;
 
   return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
+    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-slate-100/80 transition-colors text-left"
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50/80 hover:bg-slate-100/80 transition-colors text-left"
       >
         <div className="flex items-center gap-2.5">
-          {expanded ? (
-            <ChevronDown className="w-4 h-4 text-slate-400" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+          {expanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+          <Icon className="w-4.5 h-4.5 text-accent" />
+          <span className="text-sm font-bold text-slate-800">{title}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {issueCount > 0 && (
+            <span className="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-200 font-bold">
+              {issueCount} issue{issueCount !== 1 ? "s" : ""}
+            </span>
           )}
-          <span className="text-sm font-semibold text-slate-800 capitalize">
-            {sectionKey.replace(/_/g, " ")}
-          </span>
-          <span className="text-[11px] bg-white text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-medium">
-            {colCount} cols · {recordCount} rows
+          <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200 font-bold">
+            {matchCount} match{matchCount !== 1 ? "es" : ""}
           </span>
         </div>
       </button>
 
       {expanded && (
-        <div className="p-4 border-t border-slate-200 bg-white">
-          {/* Column list */}
-          <div className="mb-3">
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5">
-              Columns
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {(section.columns || []).map((col, i) => (
-                <span
-                  key={i}
-                  className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono"
-                >
-                  {col}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Data tree */}
-          <JsonTreeViewer data={section.data} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-t border-slate-200">
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wider w-36">Item</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wider w-40">Field</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wider">Wireframe</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wider">O9 Report</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wider w-36">Verdict</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center py-6 text-slate-400 italic">
+                    {showMatches ? "No items in this section" : "All items match ✓"}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((row, i) => (
+                  <tr
+                    key={i}
+                    className={cn(
+                      "transition-colors",
+                      row.status === "mismatch" && "bg-red-50/40",
+                      row.status === "only_in_wireframe" && "bg-amber-50/40",
+                      row.status === "only_in_report" && "bg-blue-50/40",
+                    )}
+                  >
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{row.item_key}</td>
+                    <td className="px-4 py-2.5 text-slate-600 font-mono text-[11px]">{row.field}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn("font-mono text-[11px]", row.status === "mismatch" ? "text-red-700 font-bold" : "text-slate-600")}>
+                        {row.wireframe_value}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn("font-mono text-[11px]", row.status === "mismatch" ? "text-red-700 font-bold" : "text-slate-600")}>
+                        {row.report_value}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <StatusBadge status={row.status} />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   );
 }
 
-export default function XlsxConverter() {
-  const [xlsxFile, setXlsxFile] = useState(null);
-  const [referenceFile, setReferenceFile] = useState(null);
-  const [loadingConvert, setLoadingConvert] = useState(false);
-  const [loadingCompare, setLoadingCompare] = useState(false);
-  const [results, setResults] = useState(null);
-  const [jsonOutput, setJsonOutput] = useState(null);
+/* ═══════════════════════════════════════════════════════
+   VALIDATION RESULTS VIEW
+   ═══════════════════════════════════════════════════════ */
+function ValidationResults({ data, nameA, nameB }) {
+  const [showMatches, setShowMatches] = useState(true);
 
-  // Mode: "wireframe" (section-aware) or "flat" (legacy flat-table)
-  const [mode, setMode] = useState("wireframe");
+  const { summary, rows, counts } = data;
+  const filterRows = rows.filter((r) => r.section === "Filters");
+  const dimRows = rows.filter((r) => r.section === "Dimensions");
+  const measureRows = rows.filter((r) => r.section === "Measures");
 
-  // Preview state (shown after upload for wireframe mode)
-  const [preview, setPreview] = useState(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
+  const hasIssues = summary.mismatches > 0 || summary.only_in_wireframe > 0 || summary.only_in_report > 0;
 
-  // Unified comparison results (for wireframe-vs-JSON comparison)
-  const [unifiedResults, setUnifiedResults] = useState(null);
+  const handlePrint = async () => {
+    // Build a simple HTML report for printing
+    const buildTable = (title, sectionRows) => {
+      if (sectionRows.length === 0) return "";
+      const headerRow = `<tr><th>Item</th><th>Field</th><th>Wireframe</th><th>O9 Report</th><th>Verdict</th></tr>`;
+      const dataRows = sectionRows
+        .map(
+          (r) =>
+            `<tr class="${r.status}"><td>${r.item_key}</td><td>${r.field}</td><td>${r.wireframe_value}</td><td>${r.report_value}</td><td>${r.status.replace(/_/g, " ")}</td></tr>`
+        )
+        .join("");
+      return `<h2>${title}</h2><table>${headerRow}${dataRows}</table>`;
+    };
 
-  // Report names for PDF export
-  const [nameA, setNameA] = useState("Wireframe");
-  const [nameB, setNameB] = useState("Reference JSON");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wireframe Validation — ${nameA} vs ${nameB}</title>
+    <style>
+      body { font-family: -apple-system, sans-serif; padding: 30px; color: #1e293b; }
+      h1 { font-size: 22px; margin-bottom: 5px; }
+      h2 { font-size: 16px; margin: 25px 0 8px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+      .subtitle { color: #64748b; margin-bottom: 20px; }
+      .summary { display: flex; gap: 15px; margin-bottom: 25px; }
+      .metric { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 20px; text-align: center; min-width: 100px; }
+      .metric .val { font-size: 24px; font-weight: 700; }
+      .metric .lbl { font-size: 11px; color: #64748b; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 15px; }
+      th { background: #f1f5f9; text-align: left; padding: 8px 10px; font-weight: 600; border: 1px solid #e2e8f0; }
+      td { padding: 6px 10px; border: 1px solid #e2e8f0; }
+      tr.mismatch { background: #fef2f2; }
+      tr.only_in_wireframe { background: #fffbeb; }
+      tr.only_in_report { background: #eff6ff; }
+      @media print { body { padding: 15px; } }
+    </style></head><body>
+    <h1>Wireframe Validation Report</h1>
+    <p class="subtitle">${nameA} vs ${nameB} — ${new Date().toLocaleDateString()}</p>
+    <div class="summary">
+      <div class="metric"><div class="val">${summary.match_percentage}%</div><div class="lbl">Match Score</div></div>
+      <div class="metric"><div class="val">${summary.total_fields}</div><div class="lbl">Total Fields</div></div>
+      <div class="metric"><div class="val" style="color:#059669">${summary.matches}</div><div class="lbl">Matches</div></div>
+      <div class="metric"><div class="val" style="color:#dc2626">${summary.mismatches}</div><div class="lbl">Mismatches</div></div>
+      <div class="metric"><div class="val" style="color:#d97706">${summary.only_in_wireframe}</div><div class="lbl">Only in WF</div></div>
+      <div class="metric"><div class="val" style="color:#2563eb">${summary.only_in_report}</div><div class="lbl">Only in Report</div></div>
+    </div>
+    ${buildTable("Filters", filterRows)}
+    ${buildTable("Dimensions", dimRows)}
+    ${buildTable("Measures", measureRows)}
+    </body></html>`;
 
-  const [options, setOptions] = useState({
-    sheet_name: "",
-    header_row: 1,
-    treat_first_column_as_key: true,
-    normalize_keys: true,
-  });
-
-  // Auto-detect wireframe sections when file is uploaded
-  const handleFileChange = useCallback(
-    async (file) => {
-      setXlsxFile(file);
-      setResults(null);
-      setJsonOutput(null);
-      setPreview(null);
-      setUnifiedResults(null);
-
-      if (!file) return;
-
-      if (file) setNameA(file.name.replace(/\.(xlsx|xls)$/i, ""));
-
-      // Auto-preview in wireframe mode
-      if (mode === "wireframe") {
-        setLoadingPreview(true);
-        try {
-          const fd = new FormData();
-          fd.append("file", file);
-          const res = await fetch(`${API_BASE}/wireframe-preview`, {
-            method: "POST",
-            body: fd,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setPreview(data);
-            if (data.is_wireframe) {
-              toast.success(
-                `Detected ${data.detected_sections.length} section(s) in wireframe`
-              );
-            } else {
-              toast(
-                "No wireframe sections detected — will parse as flat table",
-                { icon: "ℹ️" }
-              );
-            }
-          }
-        } catch {
-          // Preview is optional — don't block
-        } finally {
-          setLoadingPreview(false);
-        }
-      }
-    },
-    [mode]
-  );
-
-  const buildFormData = (compare) => {
-    const fd = new FormData();
-
-    if (mode === "wireframe" && !compare) {
-      // Wireframe mode
-      fd.append("file", xlsxFile);
-      if (options.sheet_name) fd.append("sheet_name", options.sheet_name);
-      fd.append("normalize_keys", options.normalize_keys);
-    } else {
-      // Flat mode / compare mode
-      fd.append(compare ? "xlsx_file" : "file", xlsxFile);
-      if (compare) fd.append("reference_file", referenceFile);
-      if (options.sheet_name) fd.append("sheet_name", options.sheet_name);
-      fd.append("header_row", options.header_row);
-      fd.append("treat_first_column_as_key", options.treat_first_column_as_key);
-      fd.append("normalize_keys", options.normalize_keys);
-    }
-    return fd;
+    printHtmlReport(html, `Wireframe Validation — ${nameA} vs ${nameB}`);
   };
 
-  const handleConvert = async (compare = false) => {
-    if (!xlsxFile) return toast.error("Please upload an XLSX file");
-    if (compare && !referenceFile)
-      return toast.error("Please upload a reference JSON");
+  return (
+    <div className="animate-fade-in-up space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2.5">
+          <Shield className={cn("w-6 h-6", hasIssues ? "text-red-500" : "text-emerald-500")} />
+          <h2 className="text-lg font-bold text-slate-800">Validation Results</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMatches(!showMatches)}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors border",
+              showMatches
+                ? "bg-accent/10 text-accent border-accent/20"
+                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+            )}
+          >
+            {showMatches ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            {showMatches ? "Showing All" : "Issues Only"}
+          </button>
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            Print / Save as PDF
+          </button>
+        </div>
+      </div>
 
-    compare ? setLoadingCompare(true) : setLoadingConvert(true);
+      {/* Overall verdict */}
+      <div className={cn(
+        "rounded-xl border-2 p-4 flex items-center gap-3",
+        hasIssues ? "border-red-200 bg-red-50/50" : "border-emerald-200 bg-emerald-50/50"
+      )}>
+        {hasIssues ? (
+          <>
+            <XCircle className="w-7 h-7 text-red-500 flex-shrink-0" />
+            <div>
+              <div className="font-bold text-red-800">Validation Failed</div>
+              <div className="text-sm text-red-600">
+                Found {summary.mismatches} mismatch{summary.mismatches !== 1 ? "es" : ""}, {summary.only_in_wireframe} wireframe-only, and {summary.only_in_report} report-only item{summary.only_in_report !== 1 ? "s" : ""}.
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <CheckCircle2 className="w-7 h-7 text-emerald-500 flex-shrink-0" />
+            <div>
+              <div className="font-bold text-emerald-800">Validation Passed</div>
+              <div className="text-sm text-emerald-600">All {summary.total_fields} fields match between wireframe and report.</div>
+            </div>
+          </>
+        )}
+      </div>
 
+      {/* Summary metrics */}
+      <div className="grid grid-cols-6 gap-3">
+        <MetricCard label="Match Score" value={`${summary.match_percentage}%`} icon={BarChart3} color={summary.match_percentage === 100 ? "text-emerald-600" : "text-red-500"} />
+        <MetricCard label="Total Fields" value={summary.total_fields} color="text-slate-800" />
+        <MetricCard label="Matches" value={summary.matches} icon={CheckCircle2} color="text-emerald-600" />
+        <MetricCard label="Mismatches" value={summary.mismatches} icon={XCircle} color="text-red-500" />
+        <MetricCard label="Only in Wireframe" value={summary.only_in_wireframe} icon={AlertTriangle} color="text-amber-500" />
+        <MetricCard label="Only in Report" value={summary.only_in_report} icon={AlertTriangle} color="text-blue-500" />
+      </div>
+
+      {/* Item counts */}
+      <div className="grid grid-cols-3 gap-3 text-xs">
+        <div className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex justify-between items-center">
+          <span className="text-slate-500 font-medium flex items-center gap-1.5"><Filter className="w-3.5 h-3.5" /> Filters</span>
+          <span className="font-mono text-slate-700">WF: {counts.wireframe.filters} | RPT: {counts.report.filters}</span>
+        </div>
+        <div className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex justify-between items-center">
+          <span className="text-slate-500 font-medium flex items-center gap-1.5"><Layers className="w-3.5 h-3.5" /> Dimensions</span>
+          <span className="font-mono text-slate-700">WF: {counts.wireframe.dimensions} | RPT: {counts.report.dimensions}</span>
+        </div>
+        <div className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex justify-between items-center">
+          <span className="text-slate-500 font-medium flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Measures</span>
+          <span className="font-mono text-slate-700">WF: {counts.wireframe.measures} | RPT: {counts.report.measures}</span>
+        </div>
+      </div>
+
+      {/* Section tables */}
+      <SectionTable title="Filters" icon={Filter} rows={filterRows} showMatches={showMatches} />
+      <SectionTable title="Dimensions" icon={Layers} rows={dimRows} showMatches={showMatches} />
+      <SectionTable title="Measures" icon={Activity} rows={measureRows} showMatches={showMatches} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAIN WIREFRAME VALIDATOR COMPONENT
+   ═══════════════════════════════════════════════════════ */
+export default function XlsxConverter() {
+  const [wireframeFile, setWireframeFile] = useState(null);
+  const [reportFile, setReportFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [validationResult, setValidationResult] = useState(null);
+  const [nameA, setNameA] = useState("Wireframe");
+  const [nameB, setNameB] = useState("O9 Report");
+
+  const handleWireframeChange = (file) => {
+    setWireframeFile(file);
+    setValidationResult(null);
+    if (file) setNameA(file.name.replace(/\.(xlsx|xls)$/i, ""));
+  };
+
+  const handleReportChange = (file) => {
+    setReportFile(file);
+    setValidationResult(null);
+    if (file) setNameB(file.name.replace(/\.json$/i, ""));
+  };
+
+  const handleValidate = async () => {
+    if (!wireframeFile) return toast.error("Please upload a wireframe XLSX");
+    if (!reportFile) return toast.error("Please upload an O9 report JSON");
+
+    setLoading(true);
     try {
-      let endpoint;
-      if (compare) {
-        endpoint = "/xlsx-compare";
-      } else if (mode === "wireframe") {
-        endpoint = "/wireframe-to-json";
-      } else {
-        endpoint = "/xlsx-to-json";
-      }
+      const fd = new FormData();
+      fd.append("wireframe_file", wireframeFile);
+      fd.append("report_file", reportFile);
 
-      const res = await fetch(`${API_BASE}${endpoint}`, {
+      const res = await fetch(`${API_BASE}/wireframe-compare`, {
         method: "POST",
-        body: buildFormData(compare),
+        body: fd,
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Server error" }));
         throw new Error(err.detail);
       }
+
       const data = await res.json();
+      setValidationResult(data);
 
-      if (compare) {
-        setResults(data);
-        setJsonOutput(null);
-        setUnifiedResults(null);
-        toast.success("Conversion & comparison complete!");
+      const pct = data.summary.match_percentage;
+      if (pct === 100) {
+        toast.success("Perfect match — 100% validation passed!");
+      } else if (pct >= 90) {
+        toast.success(`Validation complete — ${pct}% match`);
       } else {
-        setJsonOutput(data);
-        setResults(null);
-        setUnifiedResults(null);
-
-        // If we have both wireframe output and reference, auto-compare
-        const sectionCount = data.section_order?.length;
-        if (sectionCount) {
-          toast.success(
-            `Parsed ${sectionCount} section(s) with ${Object.values(data.sections || {}).reduce((a, s) => a + (s.data?.length || 0), 0)} total records`
-          );
-
-          // If reference JSON is uploaded, auto-trigger unified comparison
-          if (referenceFile && data.sections) {
-            try {
-              const refContent = await referenceFile.text();
-              const refJson = JSON.parse(refContent);
-
-              // If reference is also O9-structured, use unified diff
-              if (refJson.sections && typeof refJson.sections === "object") {
-                const compareRes = await fetch(`${API_BASE}/compare-json-body`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    baseline: data,
-                    target: refJson,
-                    name_a: nameA,
-                    name_b: nameB,
-                  }),
-                });
-                if (compareRes.ok) {
-                  const compareData = await compareRes.json();
-                  if (compareData.mode === "unified") {
-                    compareData.report_a_name = nameA;
-                    compareData.report_b_name = nameB;
-                    setUnifiedResults(compareData);
-                    toast.success(`Auto-compared — ${compareData.summary.match_percentage}% match`);
-                  }
-                }
-              }
-            } catch {
-              // Auto-compare is best-effort, don't block
-            }
-          }
-        } else {
-          toast.success("Converted to JSON!");
-        }
+        toast.error(`Validation found significant issues — ${pct}% match`);
       }
     } catch (error) {
       toast.error(error.message);
     } finally {
-      compare ? setLoadingCompare(false) : setLoadingConvert(false);
+      setLoading(false);
     }
   };
-
-  const downloadConvertedJson = () => {
-    if (!jsonOutput) return;
-    const blob = new Blob([JSON.stringify(jsonOutput, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "converted.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const copyToClipboard = () => {
-    if (!jsonOutput) return;
-    navigator.clipboard.writeText(JSON.stringify(jsonOutput, null, 2));
-    toast.success("Copied to clipboard");
-  };
-
-  /* ── PDF Export for comparison results ── */
-  const handleExportPDF = async () => {
-    if (!results) return;
-    try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      const res = await fetch(`${API_BASE}/export-report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(results),
-      });
-      if (!res.ok) throw new Error("Report generation failed");
-      const html = await res.text();
-
-      const container = document.createElement("div");
-      container.innerHTML = html;
-      container.style.position = "fixed";
-      container.style.left = "0";
-      container.style.top = "0";
-      container.style.width = "1400px";
-      container.style.opacity = "0";
-      container.style.zIndex = "-1";
-      container.style.pointerEvents = "none";
-      document.body.appendChild(container);
-
-      await html2pdf()
-        .set({
-          margin: [10, 10, 10, 10],
-          filename: `wireframe_comparison_${new Date().toISOString().slice(0, 10)}.pdf`,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 1400 },
-          jsPDF: { unit: "mm", format: "a3", orientation: "landscape" },
-          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-        })
-        .from(container)
-        .save();
-
-      document.body.removeChild(container);
-      toast.success("PDF downloaded!");
-    } catch (e) {
-      console.error("PDF export error:", e);
-      toast.error(e.message || "PDF export failed");
-    }
-  };
-
-  const isWireframeOutput =
-    jsonOutput && jsonOutput.sections && jsonOutput.section_order;
 
   return (
     <div className="space-y-6">
-      {/* Mode selector */}
-      <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg w-fit">
-        <button
-          onClick={() => {
-            setMode("wireframe");
-            setJsonOutput(null);
-            setResults(null);
-            setPreview(null);
-            setUnifiedResults(null);
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            mode === "wireframe"
-              ? "bg-white text-accent shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          Wireframe Mode
-        </button>
-        <button
-          onClick={() => {
-            setMode("flat");
-            setJsonOutput(null);
-            setResults(null);
-            setPreview(null);
-            setUnifiedResults(null);
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            mode === "flat"
-              ? "bg-white text-accent shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          <Table2 className="w-4 h-4" />
-          Flat Table Mode
-        </button>
-      </div>
-
-      {/* Top row: Uploads + Options + Actions */}
-      <div className="grid grid-cols-3 gap-5">
-        {/* Uploads column */}
-        <div className="flex flex-col gap-4">
+      {/* Upload area */}
+      <div className="grid grid-cols-2 gap-5">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Wireframe (XLSX)
+          </label>
           <FileUploadZone
-            file={xlsxFile}
-            onFileChange={handleFileChange}
-            label="Wireframe XLSX"
             accept=".xlsx,.xls"
-            id="upload-xlsx"
+            label="Drop wireframe XLSX here"
+            file={wireframeFile}
+            onFileChange={handleWireframeChange}
           />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+            <FileJson className="w-3.5 h-3.5" />
+            O9 Report (JSON)
+          </label>
           <FileUploadZone
-            file={referenceFile}
-            onFileChange={(f) => {
-              setReferenceFile(f);
-              if (f) setNameB(f.name.replace(/\.(json)$/i, ""));
-            }}
-            label="Reference JSON (for comparison)"
             accept=".json"
-            id="upload-ref-json"
+            label="Drop O9 report JSON here"
+            file={reportFile}
+            onFileChange={handleReportChange}
           />
-        </div>
-
-        {/* Options column */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200">
-          <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm mb-4 pb-3 border-b border-slate-100">
-            <Settings className="w-4 h-4 text-accent" />
-            Conversion Options
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium">
-                Sheet Name
-              </label>
-              <input
-                type="text"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all"
-                placeholder="Leave blank for first sheet"
-                value={options.sheet_name}
-                onChange={(e) =>
-                  setOptions({ ...options, sheet_name: e.target.value })
-                }
-              />
-            </div>
-
-            {/* Flat-mode-only options */}
-            {mode === "flat" && (
-              <>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1 font-medium">
-                    Header Row
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all"
-                    value={options.header_row}
-                    onChange={(e) =>
-                      setOptions({
-                        ...options,
-                        header_row: parseInt(e.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded border-slate-300 text-accent focus:ring-accent/30"
-                    checked={options.treat_first_column_as_key}
-                    onChange={(e) =>
-                      setOptions({
-                        ...options,
-                        treat_first_column_as_key: e.target.checked,
-                      })
-                    }
-                  />
-                  <span className="text-sm text-slate-600 select-none">
-                    Use Column 1 as keys
-                  </span>
-                </label>
-              </>
-            )}
-
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                className="w-4 h-4 rounded border-slate-300 text-accent focus:ring-accent/30"
-                checked={options.normalize_keys}
-                onChange={(e) =>
-                  setOptions({ ...options, normalize_keys: e.target.checked })
-                }
-              />
-              <span className="text-sm text-slate-600 select-none">
-                Normalize column names
-              </span>
-            </label>
-
-            {/* Wireframe mode hint */}
-            {mode === "wireframe" && (
-              <div className="bg-accent/5 rounded-lg p-3 border border-accent/10">
-                <p className="text-[11px] text-accent/80 leading-relaxed">
-                  <strong>Wireframe mode</strong> auto-detects section banners
-                  (colored rows like <em>Filter AOP</em>, <em>Dimensions</em>,{" "}
-                  <em>Measure</em>) and parses each section with its own headers.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Actions column */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200 flex flex-col justify-center gap-4">
-          <button
-            id="btn-convert"
-            onClick={() => handleConvert(false)}
-            disabled={loadingConvert || !xlsxFile}
-            className="w-full bg-accent hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg shadow-sm flex justify-center items-center gap-2 transition-all text-sm"
-          >
-            {loadingConvert ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Zap className="w-4 h-4" />
-            )}
-            {mode === "wireframe"
-              ? "Parse Wireframe"
-              : "Convert to JSON Only"}
-          </button>
-
-          <div className="flex items-center gap-3">
-            <div className="flex-1 border-b border-slate-200" />
-            <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">
-              or
-            </span>
-            <div className="flex-1 border-b border-slate-200" />
-          </div>
-
-          <button
-            id="btn-convert-compare"
-            onClick={() => handleConvert(true)}
-            disabled={loadingCompare || !xlsxFile || !referenceFile}
-            className="w-full bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 font-medium py-3 px-4 rounded-lg border border-slate-200 flex justify-center items-center gap-2 transition-all text-sm"
-          >
-            {loadingCompare && (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            )}
-            Convert & Compare
-          </button>
         </div>
       </div>
 
-      {/* Wireframe preview (shown after upload) */}
-      {preview && mode === "wireframe" && (
-        <div className="animate-fade-in-up bg-white rounded-xl border border-slate-200 p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <FileSpreadsheet className="w-4 h-4 text-accent" />
-            <h3 className="text-sm font-semibold text-slate-800">
-              Wireframe Preview
-            </h3>
-            <span className="text-[11px] bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full font-medium">
-              {preview.total_rows} rows · {preview.total_cols} cols ·{" "}
-              {preview.sheet}
-            </span>
-          </div>
+      {/* Validate button */}
+      <div className="flex justify-center">
+        <button
+          id="btn-validate"
+          onClick={handleValidate}
+          disabled={!wireframeFile || !reportFile || loading}
+          className="flex items-center gap-2 bg-gradient-to-r from-accent to-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+          {loading ? "Validating..." : "Validate Report"}
+        </button>
+      </div>
 
-          {preview.is_wireframe ? (
-            <div className="flex flex-wrap gap-2">
-              {preview.detected_sections.map((sec, i) => (
-                <SectionBadge key={i} name={sec.name} row={sec.row} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-slate-400">
-              No section banners detected — will parse as a standard flat table.
-            </p>
-          )}
-        </div>
-      )}
-
-      {loadingPreview && (
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          Detecting wireframe sections…
-        </div>
-      )}
-
-      {/* Unified comparison results (5-column table with PDF export) */}
-      {unifiedResults && (
-        <UnifiedResultsView results={unifiedResults} nameA={nameA} nameB={nameB} />
-      )}
-
-      {/* Flat comparison results with PDF export */}
-      {results && (
-        <div className="animate-fade-in-up space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-slate-700">Comparison Results</h3>
-            <div className="flex gap-2">
-              <button
-                onClick={handleExportPDF}
-                className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Download PDF
-              </button>
-            </div>
-          </div>
-          <SummaryCard summary={results.summary} />
-          <DiffTable differences={results.differences} />
-        </div>
-      )}
-
-      {/* Wireframe JSON output */}
-      {isWireframeOutput && (
-        <div className="animate-fade-in-up space-y-4">
-          {/* Header bar */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <h3 className="font-semibold text-slate-800 text-sm">
-                  Wireframe JSON Output
-                </h3>
-                <span className="text-[11px] bg-accent/10 text-accent px-2.5 py-0.5 rounded-full font-medium">
-                  {jsonOutput.section_order.length} sections ·{" "}
-                  {Object.values(jsonOutput.sections).reduce(
-                    (a, s) => a + (s.data?.length || 0),
-                    0
-                  )}{" "}
-                  total records
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={copyToClipboard}
-                  className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium"
-                >
-                  <Copy className="w-3.5 h-3.5" /> Copy
-                </button>
-                <button
-                  onClick={downloadConvertedJson}
-                  className="flex items-center gap-1.5 text-xs bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                  <Download className="w-3.5 h-3.5" /> Download JSON
-                </button>
-              </div>
-            </div>
-
-            {/* Metadata */}
-            {jsonOutput.metadata &&
-              Object.keys(jsonOutput.metadata).length > 0 && (
-                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-2">
-                    Metadata
-                  </div>
-                  <div className="flex flex-wrap gap-x-6 gap-y-1">
-                    {Object.entries(jsonOutput.metadata).map(([k, v]) => (
-                      <div key={k} className="text-xs">
-                        <span className="text-slate-500 font-medium">{k}:</span>{" "}
-                        <span className="text-slate-700">
-                          {v !== null ? String(v) : "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-          </div>
-
-          {/* Section viewers */}
-          {jsonOutput.section_order.map((secKey, i) => (
-            <SectionViewer
-              key={secKey}
-              sectionKey={secKey}
-              section={jsonOutput.sections[secKey]}
-              defaultExpanded={i === 0}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Flat JSON output (legacy mode) */}
-      {jsonOutput && !isWireframeOutput && (
-        <div className="animate-fade-in-up bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="font-semibold text-slate-800 text-sm">
-              Converted JSON Output
-            </h3>
-            <div className="flex gap-2">
-              <button
-                onClick={copyToClipboard}
-                className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium"
-              >
-                <Copy className="w-3.5 h-3.5" /> Copy
-              </button>
-              <button
-                onClick={downloadConvertedJson}
-                className="flex items-center gap-1.5 text-xs bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                <Download className="w-3.5 h-3.5" /> Download JSON
-              </button>
-            </div>
-          </div>
-          <div className="p-4">
-            <JsonTreeViewer data={jsonOutput} />
-          </div>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!results && !jsonOutput && !unifiedResults && !loadingConvert && !loadingCompare && (
-        <div className="text-center py-12 text-slate-400">
-          <FileSpreadsheet className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-          <p className="text-sm">
-            Upload an XLSX wireframe and click{" "}
-            <strong className="text-slate-500">Parse Wireframe</strong> to get
-            started.
-          </p>
-          <p className="text-xs mt-1 text-slate-300">
-            Supports O9 multi-section wireframes with colored section banners.
-          </p>
-        </div>
+      {/* Results */}
+      {validationResult && (
+        <ValidationResults data={validationResult} nameA={nameA} nameB={nameB} />
       )}
     </div>
   );
