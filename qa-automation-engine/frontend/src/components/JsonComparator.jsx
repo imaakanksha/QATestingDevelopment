@@ -18,7 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { API_BASE, cn } from "../lib/utils";
+import { API_BASE, cn, printHtmlReport } from "../lib/utils";
 import FileUploadZone from "./FileUploadZone";
 import SummaryCard from "./SummaryCard";
 import DiffTable from "./DiffTable";
@@ -203,67 +203,37 @@ function SectionDiffView({ sectionKey, section, nameA, nameB, showIdentical }) {
 function SectionResults({ results, nameA, nameB }) {
   const [showIdentical, setShowIdentical] = useState(false);
   const [activeSection, setActiveSection] = useState("all");
-  const [exporting, setExporting] = useState(false);
 
-  const handleExportPDF = async () => {
-    setExporting(true);
-    try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      const res = await fetch(`${API_BASE}/export-section-report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(results),
-      });
-      if (!res.ok) throw new Error("Report generation failed");
-      const html = await res.text();
-
-      const container = document.createElement("div");
-      container.innerHTML = html;
-      container.style.position = "absolute";
-      container.style.left = "-9999px";
-      container.style.top = "0";
-      document.body.appendChild(container);
-
-      const filename = `report_comparison_${nameA.replace(/\s+/g, "_")}_vs_${nameB.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
-      await html2pdf()
-        .set({
-          margin: [10, 10, 10, 10],
-          filename,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: "mm", format: "a3", orientation: "landscape" },
-          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-        })
-        .from(container)
-        .save();
-
-      document.body.removeChild(container);
-      toast.success("PDF downloaded!");
-    } catch (e) {
-      console.error("PDF export error:", e);
-      toast.error(e.message || "PDF export failed");
-    } finally {
-      setExporting(false);
-    }
+  const getSectionReportHtml = async () => {
+    const res = await fetch(`${API_BASE}/export-section-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(results),
+    });
+    if (!res.ok) throw new Error("Report generation failed");
+    return await res.text();
   };
 
   const handleExportHTML = async () => {
     try {
-      const res = await fetch(`${API_BASE}/export-section-report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(results),
-      });
-      if (!res.ok) throw new Error("Export failed");
-      const html = await res.text();
+      const html = await getSectionReportHtml();
       const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `report_comparison_${new Date().toISOString().slice(0, 10)}.html`;
+      a.download = `${nameA.replace(/\s+/g, "_")}_vs_${nameB.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.html`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("HTML report downloaded!");
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
+
+  const handlePrintPDF = async () => {
+    try {
+      const html = await getSectionReportHtml();
+      printHtmlReport(html, `${nameA} vs ${nameB} — Section Report`);
     } catch (e) {
       toast.error(e.message);
     }
@@ -290,12 +260,12 @@ function SectionResults({ results, nameA, nameB }) {
           </button>
           <button onClick={handleExportHTML}
             className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium border border-slate-200">
-            <Printer className="w-3.5 h-3.5" /> HTML Report
+            <Download className="w-3.5 h-3.5" /> HTML Report
           </button>
-          <button id="btn-export-pdf-section" onClick={handleExportPDF} disabled={exporting}
-            className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm disabled:opacity-60">
-            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Download PDF
+          <button id="btn-print-pdf-section" onClick={handlePrintPDF}
+            className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm">
+            <Printer className="w-3.5 h-3.5" />
+            Print / Save as PDF
           </button>
         </div>
       </div>
@@ -349,25 +319,28 @@ function SectionResults({ results, nameA, nameB }) {
 /* ═══════════════════════════════════════════════════════
    FLAT RESULTS VIEW (generic JSON diff)
    ═══════════════════════════════════════════════════════ */
-function FlatResults({ results }) {
+function FlatResults({ results, nameA = "Report_1", nameB = "Report_2" }) {
   const [exporting, setExporting] = useState(false);
-  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const getReportHtml = async () => {
+    const res = await fetch(`${API_BASE}/export-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(results),
+    });
+    if (!res.ok) throw new Error("Export failed");
+    return await res.text();
+  };
 
   const handleExportHTML = async () => {
     setExporting(true);
     try {
-      const res = await fetch(`${API_BASE}/export-report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(results),
-      });
-      if (!res.ok) throw new Error("Export failed");
-      const html = await res.text();
+      const html = await getReportHtml();
       const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `diff_report_${new Date().toISOString().slice(0, 10)}.html`;
+      a.download = `${nameA.replace(/\s+/g, "_")}_vs_${nameB.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.html`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("HTML report downloaded!");
@@ -378,44 +351,12 @@ function FlatResults({ results }) {
     }
   };
 
-  const handleExportPDF = async () => {
-    setExportingPdf(true);
+  const handlePrintPDF = async () => {
     try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      const res = await fetch(`${API_BASE}/export-report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(results),
-      });
-      if (!res.ok) throw new Error("Report generation failed");
-      const html = await res.text();
-
-      const container = document.createElement("div");
-      container.innerHTML = html;
-      container.style.position = "absolute";
-      container.style.left = "-9999px";
-      container.style.top = "0";
-      document.body.appendChild(container);
-
-      await html2pdf()
-        .set({
-          margin: [10, 10, 10, 10],
-          filename: `diff_report_${new Date().toISOString().slice(0, 10)}.pdf`,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: "mm", format: "a3", orientation: "landscape" },
-          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-        })
-        .from(container)
-        .save();
-
-      document.body.removeChild(container);
-      toast.success("PDF downloaded!");
+      const html = await getReportHtml();
+      printHtmlReport(html, `${nameA} vs ${nameB} — Diff Report`);
     } catch (e) {
-      console.error("PDF export error:", e);
-      toast.error(e.message || "PDF export failed");
-    } finally {
-      setExportingPdf(false);
+      toast.error(e.message);
     }
   };
 
@@ -426,13 +367,13 @@ function FlatResults({ results }) {
         <div className="flex items-center gap-2">
           <button id="btn-export-html" onClick={handleExportHTML} disabled={exporting}
             className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium border border-slate-200 disabled:opacity-60">
-            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             HTML Report
           </button>
-          <button id="btn-export-pdf" onClick={handleExportPDF} disabled={exportingPdf}
-            className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm disabled:opacity-60">
-            {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Download PDF
+          <button id="btn-print-pdf" onClick={handlePrintPDF}
+            className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm">
+            <Printer className="w-3.5 h-3.5" />
+            Print / Save as PDF
           </button>
         </div>
       </div>
@@ -561,7 +502,7 @@ export default function JsonComparator() {
         <SectionResults results={results} nameA={nameA} nameB={nameB} />
       )}
       {results && results.mode === "flat" && (
-        <FlatResults results={results} />
+        <FlatResults results={results} nameA={nameA} nameB={nameB} />
       )}
 
       {/* Empty state */}

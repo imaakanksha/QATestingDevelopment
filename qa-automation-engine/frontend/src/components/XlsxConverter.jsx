@@ -306,9 +306,13 @@ export default function XlsxConverter() {
 
       const container = document.createElement("div");
       container.innerHTML = html;
-      container.style.position = "absolute";
-      container.style.left = "-9999px";
+      container.style.position = "fixed";
+      container.style.left = "0";
       container.style.top = "0";
+      container.style.width = "1400px";
+      container.style.opacity = "0";
+      container.style.zIndex = "-1";
+      container.style.pointerEvents = "none";
       document.body.appendChild(container);
 
       await html2pdf()
@@ -316,7 +320,7 @@ export default function XlsxConverter() {
           margin: [10, 10, 10, 10],
           filename: `wireframe_comparison_${new Date().toISOString().slice(0, 10)}.pdf`,
           image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 1400 },
           jsPDF: { unit: "mm", format: "a3", orientation: "landscape" },
           pagebreak: { mode: ["avoid-all", "css", "legacy"] },
         })
