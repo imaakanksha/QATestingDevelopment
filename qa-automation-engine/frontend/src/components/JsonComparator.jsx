@@ -351,8 +351,9 @@ function SectionResults({ results, nameA, nameB }) {
    ═══════════════════════════════════════════════════════ */
 function FlatResults({ results }) {
   const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
-  const handleExport = async () => {
+  const handleExportHTML = async () => {
     setExporting(true);
     try {
       const res = await fetch(`${API_BASE}/export-report`, {
@@ -369,7 +370,7 @@ function FlatResults({ results }) {
       a.download = `diff_report_${new Date().toISOString().slice(0, 10)}.html`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Report downloaded!");
+      toast.success("HTML report downloaded!");
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -377,15 +378,63 @@ function FlatResults({ results }) {
     }
   };
 
+  const handleExportPDF = async () => {
+    setExportingPdf(true);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const res = await fetch(`${API_BASE}/export-report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(results),
+      });
+      if (!res.ok) throw new Error("Report generation failed");
+      const html = await res.text();
+
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      container.style.position = "absolute";
+      container.style.left = "-9999px";
+      container.style.top = "0";
+      document.body.appendChild(container);
+
+      await html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: `diff_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: "mm", format: "a3", orientation: "landscape" },
+          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+        })
+        .from(container)
+        .save();
+
+      document.body.removeChild(container);
+      toast.success("PDF downloaded!");
+    } catch (e) {
+      console.error("PDF export error:", e);
+      toast.error(e.message || "PDF export failed");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in-up space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-semibold text-slate-800">Results</h2>
-        <button id="btn-export" onClick={handleExport} disabled={exporting}
-          className="flex items-center gap-2 text-sm bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm disabled:opacity-60">
-          {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-          Export HTML Report
-        </button>
+        <div className="flex items-center gap-2">
+          <button id="btn-export-html" onClick={handleExportHTML} disabled={exporting}
+            className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors font-medium border border-slate-200 disabled:opacity-60">
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+            HTML Report
+          </button>
+          <button id="btn-export-pdf" onClick={handleExportPDF} disabled={exportingPdf}
+            className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-4 py-1.5 rounded-lg hover:bg-slate-700 transition-colors font-medium shadow-sm disabled:opacity-60">
+            {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            Download PDF
+          </button>
+        </div>
       </div>
       <SummaryCard summary={results.summary} />
       <DiffTable differences={results.differences} />
